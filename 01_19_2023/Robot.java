@@ -37,10 +37,6 @@ public class Robot extends TimedRobot {
   private int counter;
   private double distance;
   private double distanceInit;
-  private double flcmd = 0;
-  private double frcmd = 0;
-  private double blcmd = 0;
-  private double brcmd = 0;
 
   BooleanLogEntry myBooleanLog;
   DoubleLogEntry myDoubleLog;
@@ -151,44 +147,47 @@ public class Robot extends TimedRobot {
   public void teleopPeriodic() {
     //m_myRobot.tankDrive(-m_leftStick.getY(), -m_rightStick.getY());
     //m_myRobot2.tankDrive(-m_leftStick.getY(), -m_rightStick.getY());
-
+    double button3val = 0;
+    double button4val = 0;
+    double button5val = 0;
+    double button6val = 0;
 
     double gain = 0.3;
 
     if (m_leftStick.getX() > 0.1) {
-      flcmd = gain*m_leftStick.getX();
-      frcmd = gain*m_leftStick.getX();
-      blcmd = gain*-m_leftStick.getX();
-      brcmd = gain*m_leftStick.getX();
+      button3val = gain*m_leftStick.getX();
+      button4val = gain*m_leftStick.getX();
+      button5val = gain*-m_leftStick.getX();
+      button6val = gain*m_leftStick.getX();
       
     } else if (m_leftStick.getX() < -0.1) {
-      flcmd = gain*m_leftStick.getX();
-      frcmd = gain*m_leftStick.getX();
-      blcmd = gain*-m_leftStick.getX();
-      brcmd = gain*m_leftStick.getX();
+      button3val = gain*m_leftStick.getX();
+      button4val = gain*m_leftStick.getX();
+      button5val = gain*-m_leftStick.getX();
+      button6val = gain*m_leftStick.getX();
     }
     if (m_leftStick.getY() > 0.1) {
-      flcmd = gain*m_leftStick.getY();
-      frcmd = gain*m_leftStick.getY();
-      blcmd = gain*m_leftStick.getY();
-      brcmd = -gain*m_leftStick.getY();
+      button3val = gain*m_leftStick.getY();
+      button4val = gain*m_leftStick.getY();
+      button5val = gain*m_leftStick.getY();
+      button6val = -gain*m_leftStick.getY();
     } else if (m_leftStick.getY() < -0.1) {
-      flcmd = gain*m_leftStick.getY();
-      frcmd = gain*m_leftStick.getY();
-      blcmd = gain*m_leftStick.getY();
-      brcmd = -gain*m_leftStick.getY();
+      button3val = gain*m_leftStick.getY();
+      button4val = gain*m_leftStick.getY();
+      button5val = gain*m_leftStick.getY();
+      button6val = -gain*m_leftStick.getY();
     }
     if (m_leftStick.getRawButton(3)) {
-      flcmd = 0.3; //left motor
-      frcmd = 0.3; //left motor
+      button3val = 0.3; //left motor
+      button4val = 0.3; //left motor
     }
     if (m_leftStick.getRawButton(6)) {
-      brcmd = -0.3; //right motor
-      blcmd = 0.3; //right motor
+      button6val = -0.3; //right motor
+      button5val = 0.3; //right motor
     }
 
-   // m_myRobot.tankDrive(flcmd, frcmd);
-    //m_myRobot2.tankDrive(blcmd, brcmd);
+   // m_myRobot.tankDrive(button3val, button4val);
+    //m_myRobot2.tankDrive(button5val, button6val);
 
 
   }

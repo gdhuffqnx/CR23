@@ -1,0 +1,19 @@
+January 19
+
+
+telemetry is working
+encoders are working
+
+
+top priority
+GitHub  1
+
+pneumatics  2
+NavX
+
+
+visual limelight 3
+
+
+
+15.625 inches per rotation

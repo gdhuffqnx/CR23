@@ -36,22 +36,29 @@ public class Robot extends TimedRobot {
   private double time2;
   private int counter;
   private double distance;
-  private double distanceInit;
-  private double flcmd = 0;
-  private double frcmd = 0;
-  private double blcmd = 0;
-  private double brcmd = 0;
 
-  BooleanLogEntry myBooleanLog;
-  DoubleLogEntry myDoubleLog;
-  StringLogEntry myStringLog;
+  //private double leftEncoder; 
+  //private double rightEncoder; 
+
+  //private double encoder; 
+
+//  private final MotorController m_fleftMotor = new CANSparkMax(2, MotorType.kBrushless);
+//  private final MotorController m_frightMotor = new CANSparkMax(1, MotorType.kBrushless);
+//  private final MotorController m_brightMotor = new CANSparkMax(3, MotorType.kBrushless);
+//  private final MotorController m_bleftMotor = new CANSparkMax(4, MotorType.kBrushless);
+
+
+BooleanLogEntry myBooleanLog;
+DoubleLogEntry myDoubleLog;
+StringLogEntry myStringLog;
 
   private final CANSparkMax m_fLeftMotor  = new CANSparkMax(2,MotorType.kBrushless);
   private final CANSparkMax m_fRightMotor = new CANSparkMax(1, MotorType.kBrushless);
   private final CANSparkMax m_bLeftMotor  = new CANSparkMax(4,MotorType.kBrushless);
   private final CANSparkMax m_bRightMotor = new CANSparkMax(3, MotorType.kBrushless);
-  private RelativeEncoder m_encoderLeft;
-  //  private RelativeEncoder m_encoderRight;
+  private RelativeEncoder m_encoder;
+   //private final Encoder rightEncoder = new Encoder(2,3);
+ // private final Encoder m_leftEncoder = new Encoder(null, null);
 
   @Override
   public void robotInit() {
@@ -68,16 +75,28 @@ public class Robot extends TimedRobot {
     time1 = 0;
     counter = 0;
     distance = 0;
-    // Starts recording to data log
-    DataLogManager.start();
-    m_encoderLeft  = m_fLeftMotor.getEncoder();
-    //m_encoderRight = m_fRightMotor.getEncoder();
-    // Set up custom log entries
-    DataLog log = DataLogManager.getLog();
-    myBooleanLog = new BooleanLogEntry(log, "/my/boolean");
-    myDoubleLog = new DoubleLogEntry(log, "/my/double");
-    myStringLog = new StringLogEntry(log, "/my/string");
-  }
+  // Starts recording to data log
+  DataLogManager.start();
+  m_encoder = m_fLeftMotor.getEncoder();
+  // Set up custom log entries
+  DataLog log = DataLogManager.getLog();
+  myBooleanLog = new BooleanLogEntry(log, "/my/boolean");
+  myDoubleLog = new DoubleLogEntry(log, "/my/double");
+  myStringLog = new StringLogEntry(log, "/my/string");
+
+    //Encoder leftEncoder = new Encoder(0,1);
+
+    double kP = 1;
+
+    //Encoder encoder = new Encoder(0, 1);
+    //encoder = new Encoder(0, 1);
+    //rightEncoder.setDistancePerPulse(4./256.);
+    //rightEncoder.setMaxPeriod(.1); 
+    //above was crossed off and disabled
+    //rightEncoder.setMinRate(10);
+    //encoder.setReverseDirection(true);
+    //encoder.setSamplesToAverage(5);
+    }
 
   @Override
   public void autonomousInit() {
@@ -86,7 +105,6 @@ public class Robot extends TimedRobot {
     myBooleanLog.append(true);
     myDoubleLog.append(distance);
     myStringLog.append("init");
-    //m_encoderLeft.
   }
 
   @Override
@@ -95,37 +113,37 @@ public class Robot extends TimedRobot {
     double brcmd;
     double flcmd;
     double frcmd;
-    //double error;
-
-
-    //error = m_encoderLeft.getPosition() - m_encoderRight.getPosition();
     
-    distance = -(m_encoderLeft.getPosition())/8.45;
+
+
+    distance = (m_encoder.getPosition())/8.45;
     //encoder.getRate(); 
 
-   if (counter > 9)
-   {
-      //distance = distance + 0.5;
-      myBooleanLog.append(true);
-      myDoubleLog.append(distance);
-      myStringLog.append("distance");
-      counter = 0;
-   } else {
-      counter = counter +1;
-   }
-        
-   //double error = leftEncoder.getDistance() - rightEncoder.getDistance();
+if (counter > 9)
+{
+  //distance = distance + 0.5;
+  myBooleanLog.append(true);
+  myDoubleLog.append(distance);
+  myStringLog.append("distance");
+  counter = 0;
+} else {
+  counter = counter +1;
+}
+    
+    
+  //double error = leftEncoder.getDistance() - rightEncoder.getDistance();
+
 
    if (timeInit == false)  {
-      time1 = Timer.getFPGATimestamp();
-      distanceInit = distance;
-      timeInit = true;
-      //telemetry.addData("Time: ", timeInit);
-      //telemetry.update();
+    time1 = Timer.getFPGATimestamp();
+    timeInit = true;
+    //telemetry.addData("Time: ", timeInit);
+    //telemetry.update();
    }
    time2 = Timer.getFPGATimestamp();
     
-  if ((distance - distanceInit) < 2.0) {
+
+    if (time2 - time1 < 1) {
       flcmd = -0.1;//right negative foward
       frcmd = -0.1;//right negative forward
       blcmd = 0.1;//0.2;
@@ -136,7 +154,7 @@ public class Robot extends TimedRobot {
       m_bRightMotor.set(brcmd);
       //m_bRightMotor.set(speed:-0.3)
 
-  } else {
+    } else {
       m_fLeftMotor.set(0.0);
       m_fRightMotor.set(0.0);
       m_bLeftMotor.set(0.0);
@@ -151,44 +169,50 @@ public class Robot extends TimedRobot {
   public void teleopPeriodic() {
     //m_myRobot.tankDrive(-m_leftStick.getY(), -m_rightStick.getY());
     //m_myRobot2.tankDrive(-m_leftStick.getY(), -m_rightStick.getY());
-
+    double button3val = 0;
+    double button4val = 0;
+    double button5val = 0;
+    double button6val = 0;
 
     double gain = 0.3;
 
     if (m_leftStick.getX() > 0.1) {
-      flcmd = gain*m_leftStick.getX();
-      frcmd = gain*m_leftStick.getX();
-      blcmd = gain*-m_leftStick.getX();
-      brcmd = gain*m_leftStick.getX();
+      button3val = gain*m_leftStick.getX();
+      button4val = gain*m_leftStick.getX();
+      button5val = gain*-m_leftStick.getX();
+      button6val = gain*m_leftStick.getX();
       
     } else if (m_leftStick.getX() < -0.1) {
-      flcmd = gain*m_leftStick.getX();
-      frcmd = gain*m_leftStick.getX();
-      blcmd = gain*-m_leftStick.getX();
-      brcmd = gain*m_leftStick.getX();
+      button3val = gain*m_leftStick.getX();
+      button4val = gain*m_leftStick.getX();
+      button5val = gain*-m_leftStick.getX();
+      button6val = gain*m_leftStick.getX();
+      
+
     }
     if (m_leftStick.getY() > 0.1) {
-      flcmd = gain*m_leftStick.getY();
-      frcmd = gain*m_leftStick.getY();
-      blcmd = gain*m_leftStick.getY();
-      brcmd = -gain*m_leftStick.getY();
+      button3val = gain*m_leftStick.getY();
+      button4val = gain*m_leftStick.getY();
+      button5val = gain*m_leftStick.getY();
+      button6val = -gain*m_leftStick.getY();
+      
     } else if (m_leftStick.getY() < -0.1) {
-      flcmd = gain*m_leftStick.getY();
-      frcmd = gain*m_leftStick.getY();
-      blcmd = gain*m_leftStick.getY();
-      brcmd = -gain*m_leftStick.getY();
+      button3val = gain*m_leftStick.getY();
+      button4val = gain*m_leftStick.getY();
+      button5val = gain*m_leftStick.getY();
+      button6val = -gain*m_leftStick.getY();
     }
     if (m_leftStick.getRawButton(3)) {
-      flcmd = 0.3; //left motor
-      frcmd = 0.3; //left motor
+      button3val = 0.3; //left motor
+      button4val = 0.3; //left motor
     }
     if (m_leftStick.getRawButton(6)) {
-      brcmd = -0.3; //right motor
-      blcmd = 0.3; //right motor
+      button6val = -0.3; //right motor
+      button5val = 0.3; //right motor
     }
 
-   // m_myRobot.tankDrive(flcmd, frcmd);
-    //m_myRobot2.tankDrive(blcmd, brcmd);
+   // m_myRobot.tankDrive(button3val, button4val);
+    //m_myRobot2.tankDrive(button5val, button6val);
 
 
   }
