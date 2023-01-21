@@ -41,6 +41,7 @@ public class Robot extends TimedRobot {
   private double frcmd = 0;
   private double blcmd = 0;
   private double brcmd = 0;
+  private int state; 
 
   BooleanLogEntry myBooleanLog;
   DoubleLogEntry myDoubleLog;
@@ -81,6 +82,7 @@ public class Robot extends TimedRobot {
 
   @Override
   public void autonomousInit() {
+    state = 0;
     time1 = 0;
     timeInit = false;
     myBooleanLog.append(true);
@@ -91,61 +93,21 @@ public class Robot extends TimedRobot {
 
   @Override
   public void autonomousPeriodic() {
-    double blcmd;
-    double brcmd;
-    double flcmd;
-    double frcmd;
-    //double error;
-
-
-    //error = m_encoderLeft.getPosition() - m_encoderRight.getPosition();
-    
-    distance = -(m_encoderLeft.getPosition())/8.45;
-    //encoder.getRate(); 
-
-   if (counter > 9)
-   {
-      //distance = distance + 0.5;
-      myBooleanLog.append(true);
-      myDoubleLog.append(distance);
-      myStringLog.append("distance");
-      counter = 0;
-   } else {
-      counter = counter +1;
-   }
-        
-   //double error = leftEncoder.getDistance() - rightEncoder.getDistance();
-
-   if (timeInit == false)  {
-      time1 = Timer.getFPGATimestamp();
-      distanceInit = distance;
-      timeInit = true;
-      //telemetry.addData("Time: ", timeInit);
-      //telemetry.update();
-   }
-   time2 = Timer.getFPGATimestamp();
-    
-  if ((distance - distanceInit) < 2.0) {
-      flcmd = -0.1;//right negative foward
-      frcmd = -0.1;//right negative forward
-      blcmd = 0.1;//0.2;
-      brcmd = 0.1;//-0.20;
-      m_fLeftMotor.set(flcmd);
-      m_fRightMotor.set(frcmd);
-      m_bLeftMotor.set(blcmd);
-      m_bRightMotor.set(brcmd);
-      //m_bRightMotor.set(speed:-0.3)
-
-  } else {
-      m_fLeftMotor.set(0.0);
-      m_fRightMotor.set(0.0);
-      m_bLeftMotor.set(0.0);
-      m_bRightMotor.set(0.0);  
-    }
-
-   // m_myRobot.tankDrive(b3val, b4val);
-   // m_myRobot2.tankDrive(b5val, b6val);
+  switch(state) {
+    case 0: 
+      if(driveInches(12, 0.05)) {
+        state++; 
+      }
+    break;
+    case 1:
+      if(turnDegrees(90, 0.05)) {
+        state++;
+      }
+      break; 
   }
+  
+  }
+
 
   @Override
   public void teleopPeriodic() {
@@ -189,7 +151,122 @@ public class Robot extends TimedRobot {
 
    // m_myRobot.tankDrive(flcmd, frcmd);
     //m_myRobot2.tankDrive(blcmd, brcmd);
+    
+
+  }
+  public boolean driveInches (double inches, double power){
+    boolean complete = false; 
+    double blcmd;
+    double brcmd;
+    double flcmd;
+    double frcmd;
+    //double error;
 
 
+    //error = m_encoderLeft.getPosition() - m_encoderRight.getPosition();
+    
+    distance = -(m_encoderLeft.getPosition())/8.45;
+    //encoder.getRate(); 
+
+   if (counter > 9)
+   {
+      //distance = distance + 0.5;
+      myBooleanLog.append(true);
+      myDoubleLog.append(distance);
+      myStringLog.append("distance");
+      counter = 0;
+   } else {
+      counter = counter +1;
+   }
+        
+   //double error = leftEncoder.getDistance() - rightEncoder.getDistance();
+
+   if (timeInit == false)  {
+      time1 = Timer.getFPGATimestamp();
+      distanceInit = distance;
+      timeInit = true;
+      //telemetry.addData("Time: ", timeInit);
+      //telemetry.update();
+   }
+   time2 = Timer.getFPGATimestamp();
+    
+  if ((distance - distanceInit) < (inches*0.0645)) {
+      flcmd = -power;//right negative foward
+      frcmd = -power;//right negative forward
+      blcmd = power;//0.2;
+      brcmd = power;//-0.20;
+      m_fLeftMotor.set(flcmd);
+      m_fRightMotor.set(frcmd);
+      m_bLeftMotor.set(blcmd);
+      m_bRightMotor.set(brcmd);
+      //m_bRightMotor.set(speed:-0.3)
+
+  } else {
+      m_fLeftMotor.set(0.0);
+      m_fRightMotor.set(0.0);
+      m_bLeftMotor.set(0.0);
+      m_bRightMotor.set(0.0);  
+      complete = true; 
+      timeInit = false; 
+    }
+    return(complete);
+  }
+  public boolean turnDegrees (double degrees, double power){
+    boolean complete = false; 
+
+    double blcmd;
+    double brcmd;
+    double flcmd;
+    double frcmd;
+    //double error;
+
+
+    //error = m_encoderLeft.getPosition() - m_encoderRight.getPosition();
+    
+    distance = (m_encoderLeft.getPosition())/8.45;
+    //encoder.getRate(); 
+
+   if (counter > 9)
+   {
+      //distance = distance + 0.5;
+      myBooleanLog.append(true);
+      myDoubleLog.append(distance);
+      myStringLog.append("distance");
+      counter = 0;
+   } else {
+      counter = counter +1;
+   }
+        
+   //double error = leftEncoder.getDistance() - rightEncoder.getDistance();
+
+   if (timeInit == false)  {
+      time1 = Timer.getFPGATimestamp();
+      distanceInit = distance;
+      timeInit = true;
+      //telemetry.addData("Time: ", timeInit);
+      //telemetry.update();
+   }
+   time2 = Timer.getFPGATimestamp();
+    
+  if ((distance - distanceInit) < (degrees*0.015)) {
+      flcmd = power;//right negative foward
+      frcmd = power;//right negative forward
+      blcmd = power;//0.2;
+      brcmd = power;//-0.20;
+      m_fLeftMotor.set(flcmd);
+      m_fRightMotor.set(frcmd);
+      m_bLeftMotor.set(blcmd);
+      m_bRightMotor.set(brcmd);
+      //m_bRightMotor.set(speed:-0.3)
+
+  } else {
+      m_fLeftMotor.set(0.0);
+      m_fRightMotor.set(0.0);
+      m_bLeftMotor.set(0.0);
+      m_bRightMotor.set(0.0);  
+      complete = true; 
+      timeInit = false; 
+    }
+    return(complete);
   }
 }
