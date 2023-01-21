@@ -16,10 +16,15 @@ import edu.wpi.first.util.datalog.DoubleLogEntry;
 import edu.wpi.first.util.datalog.StringLogEntry;
 import edu.wpi.first.wpilibj.DataLogManager;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+//import edu.wpi.first.wpilibj.AnalogGyro;
+import com.kauailabs.navx.frc.AHRS;
+import edu.wpi.first.wpilibj.SPI;
 
+//import com.kauailabs.navx.frc.AHRS;
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.RelativeEncoder;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
+
 
 /**
  * This is a demo program showing the use of the DifferentialDrive class, specifically it contains
@@ -42,10 +47,14 @@ public class Robot extends TimedRobot {
   private double blcmd = 0;
   private double brcmd = 0;
   private int state; 
+  float pitch;
 
   BooleanLogEntry myBooleanLog;
   DoubleLogEntry myDoubleLog;
   StringLogEntry myStringLog;
+
+  AHRS gyro = new AHRS(SPI.Port.kMXP);
+  //private final AnalogGyro m_gyro = new AnalogGyro(0);
 
   private final CANSparkMax m_fLeftMotor  = new CANSparkMax(2,MotorType.kBrushless);
   private final CANSparkMax m_fRightMotor = new CANSparkMax(1, MotorType.kBrushless);
@@ -69,9 +78,11 @@ public class Robot extends TimedRobot {
     time1 = 0;
     counter = 0;
     distance = 0;
+    pitch = 0;
     // Starts recording to data log
     DataLogManager.start();
     m_encoderLeft  = m_fLeftMotor.getEncoder();
+    gyro.calibrate();
     //m_encoderRight = m_fRightMotor.getEncoder();
     // Set up custom log entries
     DataLog log = DataLogManager.getLog();
@@ -93,10 +104,14 @@ public class Robot extends TimedRobot {
 
   @Override
   public void autonomousPeriodic() {
+    
+
+
+ pitch =   gyro.getPitch();
   switch(state) {
     case 0: 
-      if(driveInches(12, 0.05)) {
-        state++; 
+      if(driveInches(30, 0.08)) {
+        //state++; 
       }
     break;
     case 1:
@@ -161,7 +176,8 @@ public class Robot extends TimedRobot {
     double flcmd;
     double frcmd;
     //double error;
-
+    //double newPitch;
+    //newPitch = double(pitch);
 
     //error = m_encoderLeft.getPosition() - m_encoderRight.getPosition();
     
@@ -172,7 +188,7 @@ public class Robot extends TimedRobot {
    {
       //distance = distance + 0.5;
       myBooleanLog.append(true);
-      myDoubleLog.append(distance);
+      myDoubleLog.append(pitch);
       myStringLog.append("distance");
       counter = 0;
    } else {
