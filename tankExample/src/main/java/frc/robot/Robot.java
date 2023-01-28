@@ -19,6 +19,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 //import edu.wpi.first.wpilibj.AnalogGyro;
 import com.kauailabs.navx.frc.AHRS;
 import edu.wpi.first.wpilibj.SPI;
+import com.ctre.phoenix.sensors.CANCoder;
 
 //import com.kauailabs.navx.frc.AHRS;
 import com.revrobotics.CANSparkMax;
@@ -49,6 +50,8 @@ public class Robot extends TimedRobot {
   private double brcmd = 0;
   private double armCmd;
   private double Pgain;
+  private double Igain;
+  private double errSum;
   private int state; 
   float pitch;
   float yaw;
@@ -85,6 +88,7 @@ public class Robot extends TimedRobot {
     counter = 0;
     distance = 0;
     pitch = 0;
+    errSum = 0;
     yaw = 0;
     // Starts recording to data log
     DataLogManager.start();
@@ -101,10 +105,11 @@ public class Robot extends TimedRobot {
 
   @Override
   public void autonomousInit() {
-    state = 2;
+    state = 3;
     time1 = 0;
     timeInit = false;
-    Pgain = 0.001;
+    Pgain = 0.002;
+    Igain = 0.000001;
     myBooleanLog.append(true);
     myDoubleLog.append(distance);
     myStringLog.append("init");
@@ -270,6 +275,7 @@ public class Robot extends TimedRobot {
     double flcmd;
     double frcmd;
     double error;
+    
 
 
     //error = m_encoderLeft.getPosition() - m_encoderRight.getPosition();
@@ -277,16 +283,7 @@ public class Robot extends TimedRobot {
     //yaw =  = (m_encoderLeft.getPosition())/8.45;
     //encoder.getRate(); 
    distance = Double.valueOf(yaw);
-   if (counter > 9)
-   {
-      //distance = distance + 0.5;
-      myBooleanLog.append(true);
-      myDoubleLog.append(distance);
-      myStringLog.append("distance");
-      counter = 0;
-   } else {
-      counter = counter +1;
-   }
+
         
    //double error = leftEncoder.getDistance() - rightEncoder.getDistance();
 
@@ -294,22 +291,22 @@ public class Robot extends TimedRobot {
       time1 = Timer.getFPGATimestamp();
       distanceInit = distance;
       timeInit = true;
-      yawInit = yaw - 90;
+      yawInit = yaw - 45;
+      errSum = 0;
       //telemetry.addData("Time: ", timeInit);
       //telemetry.update();
    }
    time2 = Timer.getFPGATimestamp();
     
    error = Double.valueOf(yaw - yawInit);
-  if (error > 0.01) {
-      blcmd = Pgain * error;
-
+   errSum = errSum + error; 
+  if (true) {
+      blcmd = (-Pgain * error) + (-Igain * errSum);
       if (blcmd > 1.0) {
         blcmd = 1.0;
       }
-      if (blcmd < 0) {
-
-        blcmd = 0;
+      if (blcmd < -1.0) {
+        blcmd = -1.0;
       }
 
       m_fLeftMotor.set(blcmd);
@@ -326,11 +323,27 @@ public class Robot extends TimedRobot {
       complete = true; 
       timeInit = false; 
     }
+  
+
+    if (counter > 9)
+    {
+       //distance = distance + 0.5;
+       myBooleanLog.append(true);
+       //myDoubleLog.append(distance);
+       myDoubleLog.append(error);
+       myStringLog.append("distance");
+       counter = 0;
+    } else {
+       counter = counter +1;
+    }
+
+
     return(complete);
+
   }
 
-  public boolean balancePitch(double power){
-    boolean complete = false; 
+public boolean balancePitch(double power){
+      boolean complete = false; 
 
     double blcmd;
     double brcmd;
@@ -397,3 +410,4 @@ public class Robot extends TimedRobot {
     return(complete);
   }
 }
+
