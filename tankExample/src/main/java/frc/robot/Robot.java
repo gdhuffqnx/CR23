@@ -34,6 +34,7 @@ public class Robot extends TimedRobot {
 
    private boolean timeInit;
    private int counter;
+   private int pitchCounter;
    private double distance;
    private double distanceInit;
    private float yawInit;
@@ -89,6 +90,7 @@ public class Robot extends TimedRobot {
 
       timeInit = false;
       counter = 0;
+      pitchCounter = 0;
       distance = 0;
       pitch = 0;
       errSum = 0;
@@ -111,7 +113,7 @@ public class Robot extends TimedRobot {
 
    @Override
    public void autonomousInit() {
-      state = 3;
+      state = 0;
       timeInit = false;
       Pgain = 0.002;
       Igain = 0.000001;
@@ -126,20 +128,29 @@ public class Robot extends TimedRobot {
       pitch =   gyro.getPitch();
       switch(state) {
          case 0: 
-            if(driveInches(24, 0.15)) {
-               state++; 
+            if(driveForwardInches(36, 0.25)) {
+               state++;
+               //state++; //jump to state 2 
             }
          break;
          case 1:
-            if(balancePitch(0.05)) {
+            if(balancePitch(0.1)) {
                state++;
+               pitchCounter = 0;
             }
          break;
          case 2:
-            if(turnDegrees(90, 0.05)) {
-               state++;
+         pitchCounter++;
+            if(pitchCounter > 250) {
+               //state++;
             }
          break; 
+         case 33: 
+         if(driveForwardInches(48, -0.25)) {
+            state++;
+            //state++; //jump to state 2 
+         }
+      break;
       }
    }
 
@@ -152,6 +163,9 @@ public class Robot extends TimedRobot {
       double filteredAngle;
       double joyXPos;
       double joyYPos;
+      double kp;
+
+      kp = 0.005;
 
       joyXPos = m_leftStick.getX();
       joyYPos = m_leftStick.getY();
@@ -169,42 +183,42 @@ public class Robot extends TimedRobot {
          drCmd = gain * Math.sqrt(drCmd);
 
          if ((m_leftStick.getX() > 0.1)&&(m_leftStick.getY() < -0.1)) {
-            desiredAngle = 57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
+            desiredAngle = -57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
           }
           if ((m_leftStick.getX() > 0.1)&&(Math.abs(m_leftStick.getY()) < 0.1)) {
-            desiredAngle = 90;
-          }
-          if ((m_leftStick.getX() < -0.1)&&(Math.abs(m_leftStick.getY()) < 0.1)) {
             desiredAngle = -90;
           }
+          if ((m_leftStick.getX() < -0.1)&&(Math.abs(m_leftStick.getY()) < 0.1)) {
+            desiredAngle = 90;
+          }
           if ((Math.abs(m_leftStick.getX()) < 0.1)&&(m_leftStick.getY() < -0.1)) {
-            desiredAngle = 179.9;
+            desiredAngle = 0;
           }
           if ((Math.abs(m_leftStick.getX()) < 0.1)&&(m_leftStick.getY() > 0.1)) {
-            desiredAngle = 0.0;
+            desiredAngle = 180;
           }
           if ((m_leftStick.getX() > 0.1)&&(m_leftStick.getY() > 0.1)) {
-             desiredAngle = 180-57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
+             desiredAngle = -180+57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
           }
  
           if ((m_leftStick.getX() < -0.1)&&(m_leftStick.getY() < -0.1)) {
-            desiredAngle = -57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
+            desiredAngle = 57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
           }
  
           if ((m_leftStick.getX() < -0.1)&&(m_leftStick.getY() > 0.1)) {
-            desiredAngle = -180+57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
+            desiredAngle = 180-57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
           }
-
-         filteredAngle = prevDesiredAngle + (0.1*(desiredAngle - prevDesiredAngle));
-
-         flcmd = -wheelAngle(filteredAngle,frontLeftEncoder.getPosition(),0,0.011,0.0,0);
-         frcmd = wheelAngle(filteredAngle,frontRightEncoder.getPosition(),1,.011,0.0,0);
-         blcmd = -wheelAngle(filteredAngle,backLeftEncoder.getPosition(),3,0.011,0.0,0);
-         brcmd = -wheelAngle(filteredAngle,backRightEncoder.getPosition(),2,0.011,0.0,0);
-         
-         prevDesiredAngle = filteredAngle;
-
       }
+      filteredAngle = prevDesiredAngle + (0.05*(desiredAngle - prevDesiredAngle));
+
+      flcmd = -wheelAngle(filteredAngle,frontLeftEncoder.getPosition(),0,kp,0.0,0);
+      frcmd = wheelAngle(filteredAngle,frontRightEncoder.getPosition(),1,kp,0.0,0);
+      blcmd = -wheelAngle(filteredAngle,backLeftEncoder.getPosition(),3,kp,0.0,0);
+      brcmd = -wheelAngle(filteredAngle,backRightEncoder.getPosition(),2,kp,0.0,0);
+         
+      prevDesiredAngle = filteredAngle;
+
+      
       if (m_leftStick.getRawButton(6)) {}
       //
       //
@@ -212,18 +226,19 @@ public class Robot extends TimedRobot {
       if (counter > 9)
       {
          myBooleanLog.append(true);
-         myDoubleLog.append(desiredAngle);
+         myDoubleLog.append(filteredAngle);
          myStringLog.append("desired");
          myBooleanLog.append(true);
          myDoubleLog.append(frontLeftEncoder.getPosition());
-         myStringLog.append("current");
-         myBooleanLog.append(true);
-         myDoubleLog.append(backRightEncoder.getPosition());
-         myStringLog.append("cmd");
+         myStringLog.append("x");
+         //myBooleanLog.append(true);
+         //myDoubleLog.append(prevDesiredAngle);
+         //myStringLog.append("y");
          counter = 0;
       } else {
          counter = counter +1;
       }
+//      drCmd = drCmd;
       m_frontLeftDrive.set(drCmd);
       m_frontRightDrive.set(drCmd);
       m_backLeftDrive.set(-drCmd);
@@ -235,7 +250,7 @@ public class Robot extends TimedRobot {
       m_backRightSteer.set(brcmd);
    }
 
-   public boolean driveInches (double inches, double power){
+   public boolean driveForwardInches(double inches, double power){
       boolean complete = false; 
     
       if (counter > 9)
@@ -247,17 +262,17 @@ public class Robot extends TimedRobot {
       } else {
          counter = counter +1;
       }
-      
+      distance = e_frontLeftDrive.getPosition();
       if (timeInit == false)  {
          //time1 = Timer.getFPGATimestamp();
          distanceInit = distance;
          timeInit = true;
       }
     
-      if ((distance - distanceInit) < (inches*0.0645)) {
-         flcmd = -power;
-         frcmd = -power;
-         blcmd = power;
+      if ((distance - distanceInit) < (inches*0.56)) {
+         flcmd = power;
+         frcmd = power;
+         blcmd = -power;
          brcmd = power;
          m_frontLeftDrive.set(flcmd);
          m_frontRightDrive.set(frcmd);
@@ -271,10 +286,21 @@ public class Robot extends TimedRobot {
          complete = true; 
          timeInit = false; 
      }
+
+     if (counter > 9)
+     {
+        myBooleanLog.append(true);
+        myDoubleLog.append(distance);
+        myStringLog.append("d");
+
+        counter = 0;
+     } else {
+        counter = counter +1;
+     }
      return(complete);
    }
 
-   public boolean turnDegrees (double degrees, double power){
+   public boolean driveRightInches (double inches, double power){
       boolean complete = false; 
       double blcmd;
       double error;
@@ -325,8 +351,8 @@ public class Robot extends TimedRobot {
       if (counter > 9)
       {
          myBooleanLog.append(true);
-         myDoubleLog.append(distance);
-         myStringLog.append("distance");
+         myDoubleLog.append(pitch);
+         myStringLog.append("pitch");
          counter = 0;
       } else {
          counter = counter +1;
@@ -335,23 +361,24 @@ public class Robot extends TimedRobot {
    if (timeInit == false)  {
       //time1 = Timer.getFPGATimestamp();
       timeInit = true;
+      pitchCounter = 0;
    }
    //time2 = Timer.getFPGATimestamp();
     
    if ((pitch) < (-5.0)) {
-      flcmd = -power;
-      frcmd = -power;
-      blcmd = power;
+      flcmd = power;
+      frcmd = power;
+      blcmd = -power;
       brcmd = power;
       m_frontLeftDrive.set(flcmd);
       m_frontRightDrive.set(frcmd);
       m_backLeftDrive.set(blcmd);
       m_backRightDrive.set(brcmd);
    } else if(pitch > 5.0) {
-      flcmd = power;
-      frcmd = power;
-      blcmd = -power;
-      brcmd = -power;
+      flcmd = -power*0.5;
+      frcmd = -power*0.5;
+      blcmd = power*0.5;
+      brcmd = -power*0.5;
       m_frontLeftDrive.set(flcmd);
       m_frontRightDrive.set(frcmd);
       m_backLeftDrive.set(blcmd);
@@ -361,8 +388,11 @@ public class Robot extends TimedRobot {
       m_frontRightDrive.set(0.0);
       m_backLeftDrive.set(0.0);
       m_backRightDrive.set(0.0);  
-      complete = true; 
-      timeInit = false; 
+      pitchCounter++;
+      if (pitchCounter > 100) {
+         complete = true; 
+         timeInit = false; 
+      }
    }
    return(complete);
    }
