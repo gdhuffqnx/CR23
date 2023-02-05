@@ -51,6 +51,22 @@ public class Robot extends TimedRobot {
    private double blErrSum = 0;
    private double brErrSum = 0;
    private double prevDesiredAngle;
+
+   private double backLeftSpinAngle;
+   private double backRightSpinAngle;
+   private double frontLeftSpinAngle;
+   private double frontRightSpinAngle;
+
+   private double prevBackLeftSpinAngle;
+   private double prevBackRightSpinAngle;
+   private double prevFrontLeftSpinAngle;
+   private double prevFrontRightSpinAngle;
+
+   private double backLeftDriveGain;
+   private double backRightDriveGain;
+   private double frontLeftDriveGain;
+   private double frontRightDriveGain;
+
    //private double armCmd;
    private double Pgain;
    private double Igain;
@@ -59,6 +75,7 @@ public class Robot extends TimedRobot {
    private int state; 
    float pitch;
    float yaw;
+   private int angleCounter;
 
    BooleanLogEntry myBooleanLog;
    DoubleLogEntry myDoubleLog;
@@ -96,6 +113,8 @@ public class Robot extends TimedRobot {
       errSum = 0;
       yaw = 0;
       prevDesiredAngle = 0;
+      angleCounter = 0;
+
       gyro.calibrate();
 	  
 	   e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
@@ -157,14 +176,14 @@ public class Robot extends TimedRobot {
    @Override
    public void teleopPeriodic() {
 
-      double gain = 0.3;
+      double gain = -0.7;
       double drCmd;
       double desiredAngle;
       double filteredAngle;
       double joyXPos;
       double joyYPos;
       double kp;
-
+         
       kp = 0.005;
 
       joyXPos = m_leftStick.getX();
@@ -175,46 +194,107 @@ public class Robot extends TimedRobot {
       frcmd = 0.0;
       brcmd = 0.0;
       drCmd = 0.0;
-
+      yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
 
       if ((Math.abs(joyXPos) > 0.09)||(Math.abs(joyYPos) > 0.09)){
-         drCmd = (joyXPos*m_leftStick.getX())+(m_leftStick.getY()*m_leftStick.getY());
+         drCmd = (joyXPos*joyXPos)+(joyYPos*joyYPos);
          drCmd = gain * Math.sqrt(drCmd);
 
-         if ((m_leftStick.getX() > 0.1)&&(m_leftStick.getY() < -0.1)) {
-            desiredAngle = -57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
+         if ((joyXPos > 0.1)&&(joyYPos < -0.1)) {
+            desiredAngle = -57.3*Math.atan(Math.abs(joyYPos/joyXPos));
           }
-          if ((m_leftStick.getX() > 0.1)&&(Math.abs(m_leftStick.getY()) < 0.1)) {
+          if ((joyXPos > 0.1)&&(Math.abs(joyYPos) < 0.1)) {
             desiredAngle = -90;
           }
-          if ((m_leftStick.getX() < -0.1)&&(Math.abs(m_leftStick.getY()) < 0.1)) {
+          if ((joyXPos < -0.1)&&(Math.abs(joyYPos) < 0.1)) {
             desiredAngle = 90;
           }
-          if ((Math.abs(m_leftStick.getX()) < 0.1)&&(m_leftStick.getY() < -0.1)) {
+          if ((Math.abs(joyXPos) < 0.1)&&(joyYPos < -0.1)) {
             desiredAngle = 0;
           }
-          if ((Math.abs(m_leftStick.getX()) < 0.1)&&(m_leftStick.getY() > 0.1)) {
+          if ((Math.abs(joyXPos) < 0.1)&&(joyYPos > 0.1)) {
             desiredAngle = 180;
           }
-          if ((m_leftStick.getX() > 0.1)&&(m_leftStick.getY() > 0.1)) {
-             desiredAngle = -180+57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
+          if ((joyXPos > 0.1)&&(joyYPos > 0.1)) {
+             desiredAngle = -180+57.3*Math.atan(Math.abs(joyYPos/joyXPos));
           }
  
-          if ((m_leftStick.getX() < -0.1)&&(m_leftStick.getY() < -0.1)) {
-            desiredAngle = 57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
+          if ((joyXPos < -0.1)&&(joyYPos < -0.1)) {
+            desiredAngle = 57.3*Math.atan(Math.abs(joyYPos/joyXPos));
           }
  
-          if ((m_leftStick.getX() < -0.1)&&(m_leftStick.getY() > 0.1)) {
-            desiredAngle = 180-57.3*Math.atan(Math.abs(m_leftStick.getY()/m_leftStick.getX()));
+          if ((joyXPos < -0.1)&&(joyYPos > 0.1)) {
+            desiredAngle = 180-57.3*Math.atan(Math.abs(joyYPos/joyXPos));
           }
       }
+
+      if ((frontLeftEncoder.getPosition() > 90)) {
+         if (desiredAngle < -90) {
+            desiredAngle = desiredAngle + 360;
+         }
+      }
+      if ((frontLeftEncoder.getPosition() > 450)) {
+         if (desiredAngle < -90) {
+            desiredAngle = desiredAngle + 720;
+         }
+      }
+      if ((frontLeftEncoder.getPosition() < -90)) {
+         if (desiredAngle > 90) {
+            desiredAngle = desiredAngle - 360;
+         }
+      }
+     /*  if ((frontLeftEncoder.getPosition() > 450)) {
+         if (desiredAngle < -90) {
+            desiredAngle = desiredAngle + 720;
+         }
+      }*/
+
+   
+      backLeftSpinAngle = 0;
+      backRightSpinAngle =0;
+      frontLeftSpinAngle =0;
+      frontRightSpinAngle =0;
+      backLeftDriveGain =1;
+      backRightDriveGain =0.8;
+      frontLeftDriveGain= 1;
+      frontRightDriveGain = 0.8;
+
+
+      if ((m_leftStick.getZ()) > 0.75){
+         desiredAngle = 0;
+         backLeftSpinAngle = 45;
+         backRightSpinAngle = -45;
+         frontLeftSpinAngle =-45;
+         frontRightSpinAngle =45;
+         backLeftDriveGain =1;
+         backRightDriveGain =-1;
+         frontLeftDriveGain= 1;
+         frontRightDriveGain = -1;
+
+         drCmd = -0.08;
+      }
+      if ((m_leftStick.getZ()) < -0.75){
+         desiredAngle = 0;
+         backLeftSpinAngle = 45;
+         backRightSpinAngle = -45;
+         frontLeftSpinAngle =-45;
+         frontRightSpinAngle =45;
+         backLeftDriveGain =1;
+         backRightDriveGain =-1;
+         frontLeftDriveGain= 1;
+         frontRightDriveGain = -1;
+
+         drCmd = 0.08;
+      }
+
+
       filteredAngle = prevDesiredAngle + (0.05*(desiredAngle - prevDesiredAngle));
 
-      flcmd = -wheelAngle(filteredAngle,frontLeftEncoder.getPosition(),0,kp,0.0,0);
-      frcmd = wheelAngle(filteredAngle,frontRightEncoder.getPosition(),1,kp,0.0,0);
-      blcmd = -wheelAngle(filteredAngle,backLeftEncoder.getPosition(),3,kp,0.0,0);
-      brcmd = -wheelAngle(filteredAngle,backRightEncoder.getPosition(),2,kp,0.0,0);
+      flcmd = -wheelAngle(filteredAngle+frontLeftSpinAngle,frontLeftEncoder.getPosition(),0,kp,0.0,0);
+      frcmd = wheelAngle(filteredAngle+frontRightSpinAngle,frontRightEncoder.getPosition(),1,kp,0.0,0);
+      blcmd = -wheelAngle(filteredAngle+backLeftSpinAngle,backLeftEncoder.getPosition(),3,kp,0.0,0);
+      brcmd = -wheelAngle(filteredAngle+backRightSpinAngle,backRightEncoder.getPosition(),2,kp,0.0,0);
          
       prevDesiredAngle = filteredAngle;
 
@@ -226,23 +306,23 @@ public class Robot extends TimedRobot {
       if (counter > 9)
       {
          myBooleanLog.append(true);
-         myDoubleLog.append(filteredAngle);
-         myStringLog.append("desired");
-         myBooleanLog.append(true);
-         myDoubleLog.append(frontLeftEncoder.getPosition());
-         myStringLog.append("x");
+         myDoubleLog.append(yaw);
+         myStringLog.append("yaw");
          //myBooleanLog.append(true);
-         //myDoubleLog.append(prevDesiredAngle);
-         //myStringLog.append("y");
+         /*myDoubleLog.append(frontRightEncoder.getVelocity());
+         myStringLog.append("x");
+         myBooleanLog.append(true);
+         myDoubleLog.append(backLeftEncoder.getVelocity());
+         myStringLog.append("y");*/
          counter = 0;
       } else {
          counter = counter +1;
       }
 //      drCmd = drCmd;
-      m_frontLeftDrive.set(drCmd);
-      m_frontRightDrive.set(drCmd);
-      m_backLeftDrive.set(-drCmd);
-      m_backRightDrive.set(drCmd);
+      m_frontLeftDrive.set(drCmd*frontLeftDriveGain);
+      m_frontRightDrive.set(drCmd*frontRightDriveGain);
+      m_backLeftDrive.set(drCmd*backLeftDriveGain);
+      m_backRightDrive.set(drCmd*backRightDriveGain);
 	  
       m_frontLeftSteer.set(flcmd);
       m_frontRightSteer.set(frcmd);
@@ -440,8 +520,8 @@ public class Robot extends TimedRobot {
       }
 
       powerCmd = (kp * errorA) + (ki * errSum) + (kd * deltaError);
-	    if (powerCmd > 0.5){powerCmd = 0.5;}
-       if (powerCmd < -0.5){powerCmd = -0.5;}
+	      if (powerCmd > 0.5){powerCmd = 0.5;}
+         if (powerCmd < -0.5){powerCmd = -0.5;}
       return(powerCmd);
    }
 }
