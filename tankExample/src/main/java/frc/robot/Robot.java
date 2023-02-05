@@ -35,6 +35,7 @@ public class Robot extends TimedRobot {
    private boolean timeInit;
    private int counter;
    private int pitchCounter;
+   private int buttonEdge6;
    private double distance;
    private double distanceInit;
    private float yawInit;
@@ -51,6 +52,7 @@ public class Robot extends TimedRobot {
    private double blErrSum = 0;
    private double brErrSum = 0;
    private double prevDesiredAngle;
+   private double prevGain;
 
    private double backLeftSpinAngle;
    private double backRightSpinAngle;
@@ -113,7 +115,9 @@ public class Robot extends TimedRobot {
       errSum = 0;
       yaw = 0;
       prevDesiredAngle = 0;
+      prevGain = 0;
       angleCounter = 0;
+      buttonEdge6 = 0;
 
       gyro.calibrate();
 	  
@@ -175,20 +179,24 @@ public class Robot extends TimedRobot {
 
    @Override
    public void teleopPeriodic() {
-
-      double gain = -0.7;
+      double orientation = 1;
+      double gain;
       double drCmd;
       double desiredAngle;
       double filteredAngle;
       double joyXPos;
       double joyYPos;
       double kp;
-         
+	   double d_yaw;
+      double gainTgt;
+      boolean yawCompensationEnable = true;
+
       kp = 0.005;
+      
+      
 
       joyXPos = m_leftStick.getX();
       joyYPos = m_leftStick.getY();
-      filteredAngle = 0.0;
       blcmd = 0.0;
       flcmd = 0.0;
       frcmd = 0.0;
@@ -196,6 +204,17 @@ public class Robot extends TimedRobot {
       drCmd = 0.0;
       yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
+
+      
+      if (m_leftStick.getRawButton(2)) {
+         gainTgt = 0.99;
+      } else {
+         gainTgt = 0.15;
+      }
+      
+      gain = prevGain + (0.025*(gainTgt - prevGain));
+      prevGain = gain;
+      gain = gain * orientation;
 
       if ((Math.abs(joyXPos) > 0.09)||(Math.abs(joyYPos) > 0.09)){
          drCmd = (joyXPos*joyXPos)+(joyYPos*joyYPos);
@@ -244,11 +263,11 @@ public class Robot extends TimedRobot {
             desiredAngle = desiredAngle - 360;
          }
       }
-     /*  if ((frontLeftEncoder.getPosition() > 450)) {
-         if (desiredAngle < -90) {
-            desiredAngle = desiredAngle + 720;
+     if ((frontLeftEncoder.getPosition() > 450)) {
+         if (desiredAngle > 90) {
+            desiredAngle = desiredAngle - 720;
          }
-      }*/
+      }
 
    
       backLeftSpinAngle = 0;
@@ -259,7 +278,24 @@ public class Robot extends TimedRobot {
       backRightDriveGain =0.8;
       frontLeftDriveGain= 1;
       frontRightDriveGain = 0.8;
-
+      
+	  d_yaw = Double.valueOf(yaw);
+     if (d_yaw > 20) {d_yaw = 20;}
+     if (d_yaw < -20) {d_yaw = -20;}
+	  
+	  if ((-10 < desiredAngle) && (desiredAngle < 10) && (drCmd > 0.1)&&yawCompensationEnable) {
+		  if (yaw > 1) {
+			  backRightDriveGain  = backRightDriveGain * (1 + (d_yaw*0.1));
+			  frontRightDriveGain = frontRightDriveGain * (1 + (d_yaw*0.1));
+		  }
+	  }
+	  
+	  if (((-170 > desiredAngle) || (desiredAngle > 170)) && (drCmd > 0.1)&&yawCompensationEnable) {
+		  if (yaw < -1) {
+			  backRightDriveGain  = backRightDriveGain * (1 - (d_yaw*0.1));
+			  frontRightDriveGain = frontRightDriveGain * (1 - (d_yaw*0.1));
+		  }
+	  }
 
       if ((m_leftStick.getZ()) > 0.75){
          desiredAngle = 0;
@@ -272,7 +308,7 @@ public class Robot extends TimedRobot {
          frontLeftDriveGain= 1;
          frontRightDriveGain = -1;
 
-         drCmd = -0.08;
+         drCmd = 0.08 * orientation;
       }
       if ((m_leftStick.getZ()) < -0.75){
          desiredAngle = 0;
@@ -285,9 +321,21 @@ public class Robot extends TimedRobot {
          frontLeftDriveGain= 1;
          frontRightDriveGain = -1;
 
-         drCmd = 0.08;
+         drCmd = -0.08 * orientation;
       }
+      if (m_leftStick.getRawButton(6)) {
+         desiredAngle = 0;
+         backLeftSpinAngle = -45;
+         backRightSpinAngle = 45;
+         frontLeftSpinAngle =45;
+         frontRightSpinAngle =-45;
+         backLeftDriveGain =1;
+         backRightDriveGain =-1;
+         frontLeftDriveGain= 1;
+         frontRightDriveGain = -1;
 
+         drCmd = 0 * orientation;
+      }
 
       filteredAngle = prevDesiredAngle + (0.05*(desiredAngle - prevDesiredAngle));
 
@@ -299,7 +347,8 @@ public class Robot extends TimedRobot {
       prevDesiredAngle = filteredAngle;
 
       
-      if (m_leftStick.getRawButton(6)) {}
+
+    
       //
       //
 
@@ -318,10 +367,10 @@ public class Robot extends TimedRobot {
       } else {
          counter = counter +1;
       }
-//      drCmd = drCmd;
+
       m_frontLeftDrive.set(drCmd*frontLeftDriveGain);
       m_frontRightDrive.set(drCmd*frontRightDriveGain);
-      m_backLeftDrive.set(drCmd*backLeftDriveGain);
+      m_backLeftDrive.set(-drCmd*backLeftDriveGain);
       m_backRightDrive.set(drCmd*backRightDriveGain);
 	  
       m_frontLeftSteer.set(flcmd);
@@ -366,7 +415,12 @@ public class Robot extends TimedRobot {
          complete = true; 
          timeInit = false; 
      }
-
+	 
+     m_frontLeftSteer.set(0.0);
+     m_frontRightSteer.set(0.0);
+     m_backLeftSteer.set(0.0);
+     m_backRightSteer.set(0.0);
+	  
      if (counter > 9)
      {
         myBooleanLog.append(true);
@@ -438,90 +492,90 @@ public class Robot extends TimedRobot {
          counter = counter +1;
       }
       
-   if (timeInit == false)  {
-      //time1 = Timer.getFPGATimestamp();
-      timeInit = true;
-      pitchCounter = 0;
-   }
-   //time2 = Timer.getFPGATimestamp();
-    
-   if ((pitch) < (-5.0)) {
-      flcmd = power;
-      frcmd = power;
-      blcmd = -power;
-      brcmd = power;
-      m_frontLeftDrive.set(flcmd);
-      m_frontRightDrive.set(frcmd);
-      m_backLeftDrive.set(blcmd);
-      m_backRightDrive.set(brcmd);
-   } else if(pitch > 5.0) {
-      flcmd = -power*0.5;
-      frcmd = -power*0.5;
-      blcmd = power*0.5;
-      brcmd = -power*0.5;
-      m_frontLeftDrive.set(flcmd);
-      m_frontRightDrive.set(frcmd);
-      m_backLeftDrive.set(blcmd);
-      m_backRightDrive.set(brcmd);
-   } else {
-      m_frontLeftDrive.set(0.0);
-      m_frontRightDrive.set(0.0);
-      m_backLeftDrive.set(0.0);
-      m_backRightDrive.set(0.0);  
-      pitchCounter++;
-      if (pitchCounter > 100) {
-         complete = true; 
-         timeInit = false; 
+      if (timeInit == false)  {
+         //time1 = Timer.getFPGATimestamp();
+         timeInit = true;
+         pitchCounter = 0;
       }
+      //time2 = Timer.getFPGATimestamp();
+    
+      if ((pitch) < (-5.0)) {
+         flcmd = power;
+         frcmd = power;
+         blcmd = -power;
+         brcmd = power;
+         m_frontLeftDrive.set(flcmd);
+         m_frontRightDrive.set(frcmd);
+         m_backLeftDrive.set(blcmd);
+         m_backRightDrive.set(brcmd);
+      } else if(pitch > 5.0) {
+         flcmd = -power*0.5;
+         frcmd = -power*0.5;
+         blcmd = power*0.5;
+         brcmd = -power*0.5;
+         m_frontLeftDrive.set(flcmd);
+         m_frontRightDrive.set(frcmd);
+         m_backLeftDrive.set(blcmd);
+         m_backRightDrive.set(brcmd);
+      } else {
+         m_frontLeftDrive.set(0.0);
+         m_frontRightDrive.set(0.0);
+         m_backLeftDrive.set(0.0);
+         m_backRightDrive.set(0.0);  
+         pitchCounter++;
+         if (pitchCounter > 100) {
+            complete = true; 
+            timeInit = false; 
+         }
+      }
+      return(complete);
    }
-   return(complete);
-   }
-
+   
    public double wheelAngle(double desiredAngle, double currentAngle, int id, double kp, double ki, double kd)
    {
-      double errorA;
+      double errorAngle;
       double powerCmd;
-	   double errSum;
+      double errSum;
       double deltaError;
 
-	   errorA = 0;
+      errorAngle = 0;
       errSum = 0;
       deltaError = 0;
 
       switch(id) {
       case 0:
-      errorA = desiredAngle - currentAngle; 
-         deltaError = (errorA - flErrPrev)*50;
-         flErrPrev = errorA;
-         flErrSum = flErrSum + (errorA*0.02);
+      errorAngle = desiredAngle - currentAngle; 
+         deltaError = (errorAngle - flErrPrev)*50;
+         flErrPrev = errorAngle;
+         flErrSum = flErrSum + (errorAngle*0.02);
          errSum = flErrSum;
          break;
       case 1:
-         errorA = desiredAngle - currentAngle; 
-         deltaError = (errorA - frErrPrev)*50;
-         frErrPrev = errorA;
-         frErrSum = frErrSum + (errorA*0.02);
+         errorAngle = desiredAngle - currentAngle; 
+         deltaError = (errorAngle - frErrPrev)*50;
+         frErrPrev = errorAngle;
+         frErrSum = frErrSum + (errorAngle*0.02);
          errSum = flErrSum;
          break;
       case 2:
-         errorA = desiredAngle - currentAngle; 
-         deltaError = (errorA - blErrPrev)*50;
-         blErrPrev = errorA;
-         blErrSum = blErrSum + (errorA*0.02);
+         errorAngle = desiredAngle - currentAngle; 
+         deltaError = (errorAngle - blErrPrev)*50;
+         blErrPrev = errorAngle;
+         blErrSum = blErrSum + (errorAngle*0.02);
          errSum = flErrSum;
          break;
       case 3:
-         errorA = desiredAngle - currentAngle; 
-         deltaError = (errorA - brErrPrev)*50;
-         brErrPrev = errorA;
-         brErrSum = brErrSum + (errorA*0.02);
+         errorAngle = desiredAngle - currentAngle; 
+         deltaError = (errorAngle - brErrPrev)*50;
+         brErrPrev = errorAngle;
+         brErrSum = brErrSum + (errorAngle*0.02);
          errSum = brErrSum;
          break;
       }
 
-      powerCmd = (kp * errorA) + (ki * errSum) + (kd * deltaError);
-	      if (powerCmd > 0.5){powerCmd = 0.5;}
-         if (powerCmd < -0.5){powerCmd = -0.5;}
+      powerCmd = (kp * errorAngle) + (ki * errSum) + (kd * deltaError);
+      if (powerCmd > 0.5){powerCmd = 0.5;}
+      if (powerCmd < -0.5){powerCmd = -0.5;}
       return(powerCmd);
    }
 }
