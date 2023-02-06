@@ -5,16 +5,17 @@
 
 package frc.robot;
 
-import edu.wpi.first.wpilibj.Joystick;
+//import edu.wpi.first.wpilibj.Joystick;
+import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.TimedRobot;
-import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.motorcontrol.MotorController;
+//import e//du.wpi.first.wpilibj.Timer;
+//import edu.wpi.first.wpilibj.motorcontrol.MotorController;
 import edu.wpi.first.util.datalog.BooleanLogEntry;
 import edu.wpi.first.util.datalog.DataLog;
 import edu.wpi.first.util.datalog.DoubleLogEntry;
 import edu.wpi.first.util.datalog.StringLogEntry;
 import edu.wpi.first.wpilibj.DataLogManager;
-import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+//import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import com.kauailabs.navx.frc.AHRS;
 import edu.wpi.first.wpilibj.SPI;
 import com.ctre.phoenix.sensors.CANCoder;
@@ -24,9 +25,10 @@ import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 
 public class Robot extends TimedRobot {
 
-   private Joystick m_leftStick;
+   //private Joystick m_leftStick;
    //private Joystick m_rightStick;
-
+   private final XboxController m_driverController = new XboxController(1);
+  
    CANCoder frontRightEncoder = new CANCoder(1);
    CANCoder frontLeftEncoder = new CANCoder(0);
    CANCoder backRightEncoder = new CANCoder(2);
@@ -35,7 +37,6 @@ public class Robot extends TimedRobot {
    private boolean timeInit;
    private int counter;
    private int pitchCounter;
-   private int buttonEdge6;
    private double distance;
    private double distanceInit;
    private float yawInit;
@@ -43,14 +44,6 @@ public class Robot extends TimedRobot {
    private double frcmd = 0;
    private double blcmd = 0;
    private double brcmd = 0;
-   private double flErrPrev = 0;
-   private double frErrPrev = 0;
-   private double blErrPrev = 0;
-   private double brErrPrev = 0;
-   private double flErrSum = 0;
-   private double frErrSum = 0;
-   private double blErrSum = 0;
-   private double brErrSum = 0;
    private double prevDesiredAngle;
    private double prevGain;
 
@@ -104,7 +97,7 @@ public class Robot extends TimedRobot {
 
    @Override
    public void robotInit() {
-      m_leftStick  = new Joystick(0);
+      //m_leftStick  = new Joystick(0);
       //m_rightStick = new Joystick(1);
 
       timeInit = false;
@@ -117,7 +110,6 @@ public class Robot extends TimedRobot {
       prevDesiredAngle = 0;
       prevGain = 0;
       angleCounter = 0;
-      buttonEdge6 = 0;
 
       gyro.calibrate();
 	  
@@ -186,17 +178,19 @@ public class Robot extends TimedRobot {
       double filteredAngle;
       double joyXPos;
       double joyYPos;
-      double kp;
+      boolean leftBumper;
 	   double d_yaw;
       double gainTgt;
+      double togglePad;
       boolean yawCompensationEnable = true;
+      boolean buttonA;
 
-      kp = 0.005;
-      
-      
+      joyXPos = m_driverController.getRightX();//m_leftStick.getX();
+      joyYPos = m_driverController.getRightY();//m_leftStick.getY();
+      leftBumper = m_driverController.getLeftBumper();
+      togglePad = m_driverController.getLeftX();
+      buttonA = m_driverController.getAButton();
 
-      joyXPos = m_leftStick.getX();
-      joyYPos = m_leftStick.getY();
       blcmd = 0.0;
       flcmd = 0.0;
       frcmd = 0.0;
@@ -205,12 +199,15 @@ public class Robot extends TimedRobot {
       yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
 
-      
-      if (m_leftStick.getRawButton(2)) {
+    gainTgt = 0.15; 
+    if (leftBumper) {
+      gainTgt = 0.7;
+    }
+/*      if (m_leftStick.getRawButton(2)) {
          gainTgt = 0.99;
       } else {
          gainTgt = 0.15;
-      }
+      } */
       
       gain = prevGain + (0.025*(gainTgt - prevGain));
       prevGain = gain;
@@ -296,8 +293,8 @@ public class Robot extends TimedRobot {
 			  frontRightDriveGain = frontRightDriveGain * (1 - (d_yaw*0.1));
 		  }
 	  }
-
-      if ((m_leftStick.getZ()) > 0.75){
+ 
+      if ((togglePad) > 0.75){
          desiredAngle = 0;
          backLeftSpinAngle = 45;
          backRightSpinAngle = -45;
@@ -310,7 +307,7 @@ public class Robot extends TimedRobot {
 
          drCmd = 0.08 * orientation;
       }
-      if ((m_leftStick.getZ()) < -0.75){
+      if ((togglePad) < -0.75){
          desiredAngle = 0;
          backLeftSpinAngle = 45;
          backRightSpinAngle = -45;
@@ -323,7 +320,7 @@ public class Robot extends TimedRobot {
 
          drCmd = -0.08 * orientation;
       }
-      if (m_leftStick.getRawButton(6)) {
+      if (buttonA) {
          desiredAngle = 0;
          backLeftSpinAngle = -45;
          backRightSpinAngle = 45;
@@ -337,32 +334,26 @@ public class Robot extends TimedRobot {
          drCmd = 0 * orientation;
       }
 
-      filteredAngle = prevDesiredAngle + (0.05*(desiredAngle - prevDesiredAngle));
+      filteredAngle = prevDesiredAngle + (0.1*(desiredAngle - prevDesiredAngle));
 
-      flcmd = -wheelAngle(filteredAngle+frontLeftSpinAngle,frontLeftEncoder.getPosition(),0,kp,0.0,0);
-      frcmd = wheelAngle(filteredAngle+frontRightSpinAngle,frontRightEncoder.getPosition(),1,kp,0.0,0);
-      blcmd = -wheelAngle(filteredAngle+backLeftSpinAngle,backLeftEncoder.getPosition(),3,kp,0.0,0);
-      brcmd = -wheelAngle(filteredAngle+backRightSpinAngle,backRightEncoder.getPosition(),2,kp,0.0,0);
+      flcmd = -wheelAngle(filteredAngle+frontLeftSpinAngle,frontLeftEncoder.getPosition());
+      frcmd = wheelAngle(filteredAngle+frontRightSpinAngle,frontRightEncoder.getPosition());      
+      blcmd = -wheelAngle(filteredAngle+backLeftSpinAngle,backLeftEncoder.getPosition());
+      brcmd = -wheelAngle(filteredAngle+backRightSpinAngle,backRightEncoder.getPosition());
          
       prevDesiredAngle = filteredAngle;
 
-      
-
-    
-      //
-      //
-
       if (counter > 9)
       {
-         myBooleanLog.append(true);
+         /*myBooleanLog.append(true);
          myDoubleLog.append(yaw);
          myStringLog.append("yaw");
-         //myBooleanLog.append(true);
-         /*myDoubleLog.append(frontRightEncoder.getVelocity());
+         //myBooleanLog.append(true);*/
+         myDoubleLog.append(filteredAngle);
          myStringLog.append("x");
-         myBooleanLog.append(true);
-         myDoubleLog.append(backLeftEncoder.getVelocity());
-         myStringLog.append("y");*/
+         //myBooleanLog.append(true);
+         myDoubleLog.append(backRightEncoder.getPosition());
+         myStringLog.append("y");
          counter = 0;
       } else {
          counter = counter +1;
@@ -393,7 +384,6 @@ public class Robot extends TimedRobot {
       }
       distance = e_frontLeftDrive.getPosition();
       if (timeInit == false)  {
-         //time1 = Timer.getFPGATimestamp();
          distanceInit = distance;
          timeInit = true;
       }
@@ -531,51 +521,17 @@ public class Robot extends TimedRobot {
       return(complete);
    }
    
-   public double wheelAngle(double desiredAngle, double currentAngle, int id, double kp, double ki, double kd)
+   public double wheelAngle(double desiredAngle, double currentAngle)
    {
-      double errorAngle;
       double powerCmd;
-      double errSum;
-      double deltaError;
+      double kp = 0.005;
+      double maxPwr = 0.5;
 
-      errorAngle = 0;
-      errSum = 0;
-      deltaError = 0;
+      powerCmd = (kp * (desiredAngle - currentAngle));
 
-      switch(id) {
-      case 0:
-      errorAngle = desiredAngle - currentAngle; 
-         deltaError = (errorAngle - flErrPrev)*50;
-         flErrPrev = errorAngle;
-         flErrSum = flErrSum + (errorAngle*0.02);
-         errSum = flErrSum;
-         break;
-      case 1:
-         errorAngle = desiredAngle - currentAngle; 
-         deltaError = (errorAngle - frErrPrev)*50;
-         frErrPrev = errorAngle;
-         frErrSum = frErrSum + (errorAngle*0.02);
-         errSum = flErrSum;
-         break;
-      case 2:
-         errorAngle = desiredAngle - currentAngle; 
-         deltaError = (errorAngle - blErrPrev)*50;
-         blErrPrev = errorAngle;
-         blErrSum = blErrSum + (errorAngle*0.02);
-         errSum = flErrSum;
-         break;
-      case 3:
-         errorAngle = desiredAngle - currentAngle; 
-         deltaError = (errorAngle - brErrPrev)*50;
-         brErrPrev = errorAngle;
-         brErrSum = brErrSum + (errorAngle*0.02);
-         errSum = brErrSum;
-         break;
-      }
+      if (powerCmd > maxPwr){powerCmd = maxPwr;}
+      if (powerCmd < -maxPwr){powerCmd = -maxPwr;}
 
-      powerCmd = (kp * errorAngle) + (ki * errSum) + (kd * deltaError);
-      if (powerCmd > 0.5){powerCmd = 0.5;}
-      if (powerCmd < -0.5){powerCmd = -0.5;}
       return(powerCmd);
    }
 }
