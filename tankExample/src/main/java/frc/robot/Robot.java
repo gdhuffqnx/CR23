@@ -175,22 +175,28 @@ public class Robot extends TimedRobot {
       double gain;
       double drCmd;
       double desiredAngle;
+      double desiredAngleFlipped;
       double filteredAngle;
       double joyXPos;
       double joyYPos;
       boolean leftBumper;
+      boolean rightBumper;
 	   double d_yaw;
+      double yawInit;
       double gainTgt;
       double togglePad;
       boolean yawCompensationEnable = true;
       boolean buttonA;
+      double turnGain;
 
       joyXPos = m_driverController.getRightX();//m_leftStick.getX();
       joyYPos = m_driverController.getRightY();//m_leftStick.getY();
       leftBumper = m_driverController.getLeftBumper();
+      rightBumper = m_driverController.getRightBumper();
       togglePad = m_driverController.getLeftX();
       buttonA = m_driverController.getAButton();
 
+      turnGain = 0.0;
       blcmd = 0.0;
       flcmd = 0.0;
       frcmd = 0.0;
@@ -199,10 +205,12 @@ public class Robot extends TimedRobot {
       yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
 
-    gainTgt = 0.15; 
-    if (leftBumper) {
-      gainTgt = 0.7;
-    }
+      gainTgt = 0.25; 
+      if (leftBumper) {
+         gainTgt = 0.8;
+      } else if (rightBumper) {
+         gainTgt = 0.1;
+      }
 /*      if (m_leftStick.getRawButton(2)) {
          gainTgt = 0.99;
       } else {
@@ -272,27 +280,42 @@ public class Robot extends TimedRobot {
       frontLeftSpinAngle =0;
       frontRightSpinAngle =0;
       backLeftDriveGain =1;
-      backRightDriveGain =0.8;
+      backRightDriveGain =0.9;
       frontLeftDriveGain= 1;
-      frontRightDriveGain = 0.8;
+      frontRightDriveGain = 0.9;
       
-	  d_yaw = Double.valueOf(yaw);
-     if (d_yaw > 20) {d_yaw = 20;}
-     if (d_yaw < -20) {d_yaw = -20;}
+	   d_yaw = Double.valueOf(yaw);
+      if (d_yaw > 20) {d_yaw = 20;}
+      if (d_yaw < -20) {d_yaw = -20;}
 	  
-	  if ((-10 < desiredAngle) && (desiredAngle < 10) && (drCmd > 0.1)&&yawCompensationEnable) {
-		  if (yaw > 1) {
-			  backRightDriveGain  = backRightDriveGain * (1 + (d_yaw*0.1));
-			  frontRightDriveGain = frontRightDriveGain * (1 + (d_yaw*0.1));
-		  }
-	  }
+	   if ((-10 < desiredAngle) && (desiredAngle < 10) && (drCmd > 0.1)&&yawCompensationEnable) {
+         if (yaw > 1) {
+			   backRightDriveGain  = backRightDriveGain * (1 + (d_yaw*0.1));
+			   frontRightDriveGain = frontRightDriveGain * (1 + (d_yaw*0.1));
+		   }
+	   }
 	  
-	  if (((-170 > desiredAngle) || (desiredAngle > 170)) && (drCmd > 0.1)&&yawCompensationEnable) {
-		  if (yaw < -1) {
-			  backRightDriveGain  = backRightDriveGain * (1 - (d_yaw*0.1));
-			  frontRightDriveGain = frontRightDriveGain * (1 - (d_yaw*0.1));
-		  }
-	  }
+	   if (((-170 > desiredAngle) || (desiredAngle > 170)) && (drCmd > 0.1)&&yawCompensationEnable) {
+		   if (yaw < -1) {
+			   backRightDriveGain  = backRightDriveGain * (1 - (d_yaw*0.1));
+			   frontRightDriveGain = frontRightDriveGain * (1 - (d_yaw*0.1));
+		   }
+	   }
+
+      if (desiredAngle > 0) {
+         desiredAngleFlipped = desiredAngle - 180; 
+      } else {
+         desiredAngleFlipped = desiredAngle + 180; 
+      }
+      if (Math.abs(frontLeftEncoder.getPosition() - desiredAngle)
+          > Math.abs(frontLeftEncoder.getPosition() - desiredAngleFlipped)) 
+      {
+         desiredAngle = desiredAngleFlipped;
+         backLeftDriveGain   = -backLeftDriveGain;
+         backRightDriveGain  = -backRightDriveGain;
+         frontLeftDriveGain  = -frontLeftDriveGain;
+         frontRightDriveGain = -frontRightDriveGain;
+      } 
  
       if ((togglePad) > 0.75){
          desiredAngle = 0;
@@ -305,7 +328,7 @@ public class Robot extends TimedRobot {
          frontLeftDriveGain= 1;
          frontRightDriveGain = -1;
 
-         drCmd = 0.08 * orientation;
+         drCmd = 0.5 * orientation * Math.abs(gain);
       }
       if ((togglePad) < -0.75){
          desiredAngle = 0;
@@ -318,7 +341,7 @@ public class Robot extends TimedRobot {
          frontLeftDriveGain= 1;
          frontRightDriveGain = -1;
 
-         drCmd = -0.08 * orientation;
+         drCmd = -0.5 * orientation * Math.abs(gain);
       }
       if (buttonA) {
          desiredAngle = 0;
@@ -334,6 +357,8 @@ public class Robot extends TimedRobot {
          drCmd = 0 * orientation;
       }
 
+
+
       filteredAngle = prevDesiredAngle + (0.1*(desiredAngle - prevDesiredAngle));
 
       flcmd = -wheelAngle(filteredAngle+frontLeftSpinAngle,frontLeftEncoder.getPosition());
@@ -342,6 +367,17 @@ public class Robot extends TimedRobot {
       brcmd = -wheelAngle(filteredAngle+backRightSpinAngle,backRightEncoder.getPosition());
          
       prevDesiredAngle = filteredAngle;
+
+     /* if (Math.abs(flcmd) > 0.05) {
+         turnGain = Math.abs(flcmd);
+         if (turnGain > 0.2) {turnGain = 0.2;}
+
+         backLeftDriveGain =1-3*(0.25-turnGain);
+         backRightDriveGain =1- 3*(0.25-turnGain);
+         frontLeftDriveGain=1- 3*(0.25-turnGain);
+         frontRightDriveGain =1- 3*(0.25-turnGain);
+      }*/ 
+
 
       if (counter > 9)
       {
@@ -533,6 +569,48 @@ public class Robot extends TimedRobot {
       if (powerCmd < -maxPwr){powerCmd = -maxPwr;}
 
       return(powerCmd);
+   }
+
+  /* public static double closestAngle(double a, double b)
+   {
+        // get direction
+        double dir = (b * 360.0) - (a * 360.0);
+
+        // convert from -360 to 360 to -180 to 180
+        if (Math.abs(dir) > 180.0)
+        {
+                dir = -(Math.signum(dir) * 360.0) + dir;
+        }
+        return dir;
+   }
+   
+   
+   public void setDirection(double setpoint)
+{
+    directionController.reset();
+
+    // use the fastest way
+    double currentAngle = directionSensor.get();
+    directionController.setSetpoint(currentAngle + closestAngle(currentAngle, setpoint));
+
+    directionController.enable();
+}
+*/
+   public void setDirection(double setpoint)
+   {
+     /*  if (Math.abs(setpointAngle) <= Math.abs(setpointAngleFlipped))
+      {
+         // unflip the motor direction use the setpoint
+         //directionMotor.setGain(1.0);
+         //directionController.setSetpoint(currentAngle + setpointAngle);
+      }
+      // if the closest angle to setpoint + 180 is shorter
+      else
+      {
+         // flip the motor direction and use the setpoint + 180
+         //directionMotor.setGain(-1.0);
+         //directionController.setSetpoint(currentAngle + setpointAngleFlipped);
+      }*/
    }
 }
 
