@@ -28,7 +28,8 @@ public class Robot extends TimedRobot {
    //private Joystick m_leftStick;
    //private Joystick m_rightStick;
    private final XboxController m_driverController = new XboxController(1);
-  
+   private final XboxController m_armController = new XboxController(2);
+
    CANCoder frontRightEncoder = new CANCoder(1);
    CANCoder frontLeftEncoder = new CANCoder(0);
    CANCoder backRightEncoder = new CANCoder(2);
@@ -46,31 +47,39 @@ public class Robot extends TimedRobot {
    private double brcmd = 0;
    private double prevDesiredAngle;
    private double prevGain;
-
+   private double prevDrCmd;
+   private double prevArmWinch; 
    private double backLeftSpinAngle;
    private double backRightSpinAngle;
    private double frontLeftSpinAngle;
    private double frontRightSpinAngle;
 
-   private double prevBackLeftSpinAngle;
-   private double prevBackRightSpinAngle;
-   private double prevFrontLeftSpinAngle;
-   private double prevFrontRightSpinAngle;
+   private double armPivotPower;
+   private double armWinchPower; 
+   private double Kp_arm;
+   private double Kd_arm; 
 
    private double backLeftDriveGain;
    private double backRightDriveGain;
    private double frontLeftDriveGain;
    private double frontRightDriveGain;
 
+   private double currentWinchPosition; 
+
    //private double armCmd;
    private double Pgain;
    private double Igain;
    private double errSum;
+   public double prevArmTarget; 
+   public double prevWinchTarget; 
+   public double armPivotError;
+   public double prevArmPivotError;
    //private double errSumWheelAngle[4];
    private int state; 
    float pitch;
    float yaw;
    private int angleCounter;
+   int debug_timer;
 
    BooleanLogEntry myBooleanLog;
    DoubleLogEntry myDoubleLog;
@@ -88,17 +97,29 @@ public class Robot extends TimedRobot {
    private final CANSparkMax m_backLeftSteer   = new CANSparkMax(6,MotorType.kBrushless);
    private final CANSparkMax m_backRightSteer  = new CANSparkMax(8, MotorType.kBrushless);
 
+   private final CANSparkMax m_armPivot = new CANSparkMax(9,MotorType.kBrushless);
+   private final CANSparkMax m_armWinch = new CANSparkMax(10,MotorType.kBrushless); 
+
    private RelativeEncoder e_frontLeftDrive;
    private RelativeEncoder e_frontRightDrive;
    private RelativeEncoder e_backLeftDrive;
    private RelativeEncoder e_backRightDrive;
 
+   private RelativeEncoder e_armPivot;
+   private RelativeEncoder e_armWinch;
 
 
    @Override
    public void robotInit() {
       //m_leftStick  = new Joystick(0);
       //m_rightStick = new Joystick(1);
+      m_frontLeftDrive.setInverted(false);
+      m_frontRightDrive.setInverted(false);
+      m_backLeftDrive.setInverted(false);  
+      m_backRightDrive.setInverted(false);  
+
+      m_armPivot.setInverted(false); 
+      m_armWinch.setInverted(false);   
 
       timeInit = false;
       counter = 0;
@@ -110,14 +131,24 @@ public class Robot extends TimedRobot {
       prevDesiredAngle = 0;
       prevGain = 0;
       angleCounter = 0;
-
+      prevDrCmd = 0;
+      prevArmTarget = 0; 
+      prevArmWinch = 0;
+      prevArmPivotError = 0; 
       gyro.calibrate();
+
+      debug_timer = 0;
+
+      Kp_arm = 0.025; 
+      Kd_arm = 0.004; 
 	  
 	   e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
       e_frontRightDrive = m_frontRightDrive.getEncoder();
       e_backLeftDrive   = m_backLeftDrive.getEncoder();
       e_backRightDrive  = m_backRightDrive.getEncoder();
-	  
+      e_armPivot        = m_armPivot.getEncoder();
+      e_armWinch        = m_armWinch.getEncoder();
+
       // Starts recording to data log
       DataLogManager.start();
       DataLog log = DataLogManager.getLog();
@@ -174,6 +205,7 @@ public class Robot extends TimedRobot {
       double orientation = 1;
       double gain;
       double drCmd;
+      
       double desiredAngle;
       double desiredAngleFlipped;
       double filteredAngle;
@@ -187,7 +219,22 @@ public class Robot extends TimedRobot {
       double togglePad;
       boolean yawCompensationEnable = true;
       boolean buttonA;
+      boolean buttonB;
+      boolean buttonY; 
       double turnGain;
+      double desiredYaw;
+      double desiredArmTarget; 
+      double desiredWinchTarget; 
+      double currentAngle;
+      int debug;
+      debug = 0;
+
+      boolean button2A; 
+      boolean button2B;
+      boolean button2Y;
+      boolean button2X; 
+      boolean left2Bumper;
+      boolean right2Bumper;
 
       joyXPos = m_driverController.getRightX();//m_leftStick.getX();
       joyYPos = m_driverController.getRightY();//m_leftStick.getY();
@@ -195,7 +242,17 @@ public class Robot extends TimedRobot {
       rightBumper = m_driverController.getRightBumper();
       togglePad = m_driverController.getLeftX();
       buttonA = m_driverController.getAButton();
+      buttonB = m_driverController.getBButton();
+      buttonY = m_driverController.getYButton();
 
+      button2A = m_armController.getAButton();
+      button2B = m_armController.getBButton();
+      button2Y = m_armController.getYButton();
+      button2X = m_armController.getXButton();
+      left2Bumper = m_armController.getLeftBumper();
+      right2Bumper = m_armController.getRightBumper();
+
+      desiredYaw = 0;
       turnGain = 0.0;
       blcmd = 0.0;
       flcmd = 0.0;
@@ -204,6 +261,21 @@ public class Robot extends TimedRobot {
       drCmd = 0.0;
       yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
+
+      currentWinchPosition = e_armWinch.getPosition(); 
+
+      //setting the arm angle and stuff
+      desiredArmTarget = armTarget(button2A, button2B, button2X, button2Y, prevArmTarget, currentWinchPosition);
+      prevArmTarget = desiredArmTarget; 
+
+      desiredWinchTarget = winchTarget(button2A, button2B, button2X, button2Y, prevArmTarget, currentWinchPosition);
+      prevWinchTarget = desiredWinchTarget; 
+      /*if (desiredAngle > -0.1) {
+         if (desiredAngle < 0.1) {
+            desiredAngle = 0.05;
+         }
+      }*/
+
 
       gainTgt = 0.25; 
       if (leftBumper) {
@@ -235,7 +307,7 @@ public class Robot extends TimedRobot {
             desiredAngle = 90;
           }
           if ((Math.abs(joyXPos) < 0.1)&&(joyYPos < -0.1)) {
-            desiredAngle = 0;
+            desiredAngle = 1;
           }
           if ((Math.abs(joyXPos) < 0.1)&&(joyYPos > 0.1)) {
             desiredAngle = 180;
@@ -253,28 +325,7 @@ public class Robot extends TimedRobot {
           }
       }
 
-      if ((frontLeftEncoder.getPosition() > 90)) {
-         if (desiredAngle < -90) {
-            desiredAngle = desiredAngle + 360;
-         }
-      }
-      if ((frontLeftEncoder.getPosition() > 450)) {
-         if (desiredAngle < -90) {
-            desiredAngle = desiredAngle + 720;
-         }
-      }
-      if ((frontLeftEncoder.getPosition() < -90)) {
-         if (desiredAngle > 90) {
-            desiredAngle = desiredAngle - 360;
-         }
-      }
-     if ((frontLeftEncoder.getPosition() > 450)) {
-         if (desiredAngle > 90) {
-            desiredAngle = desiredAngle - 720;
-         }
-      }
-
-   
+  
       backLeftSpinAngle = 0;
       backRightSpinAngle =0;
       frontLeftSpinAngle =0;
@@ -284,39 +335,6 @@ public class Robot extends TimedRobot {
       frontLeftDriveGain= 1;
       frontRightDriveGain = 0.9;
       
-	   d_yaw = Double.valueOf(yaw);
-      if (d_yaw > 20) {d_yaw = 20;}
-      if (d_yaw < -20) {d_yaw = -20;}
-	  
-	   if ((-10 < desiredAngle) && (desiredAngle < 10) && (drCmd > 0.1)&&yawCompensationEnable) {
-         if (yaw > 1) {
-			   backRightDriveGain  = backRightDriveGain * (1 + (d_yaw*0.1));
-			   frontRightDriveGain = frontRightDriveGain * (1 + (d_yaw*0.1));
-		   }
-	   }
-	  
-	   if (((-170 > desiredAngle) || (desiredAngle > 170)) && (drCmd > 0.1)&&yawCompensationEnable) {
-		   if (yaw < -1) {
-			   backRightDriveGain  = backRightDriveGain * (1 - (d_yaw*0.1));
-			   frontRightDriveGain = frontRightDriveGain * (1 - (d_yaw*0.1));
-		   }
-	   }
-
-      if (desiredAngle > 0) {
-         desiredAngleFlipped = desiredAngle - 180; 
-      } else {
-         desiredAngleFlipped = desiredAngle + 180; 
-      }
-      if (Math.abs(frontLeftEncoder.getPosition() - desiredAngle)
-          > Math.abs(frontLeftEncoder.getPosition() - desiredAngleFlipped)) 
-      {
-         desiredAngle = desiredAngleFlipped;
-         backLeftDriveGain   = -backLeftDriveGain;
-         backRightDriveGain  = -backRightDriveGain;
-         frontLeftDriveGain  = -frontLeftDriveGain;
-         frontRightDriveGain = -frontRightDriveGain;
-      } 
- 
       if ((togglePad) > 0.75){
          desiredAngle = 0;
          backLeftSpinAngle = 45;
@@ -343,7 +361,7 @@ public class Robot extends TimedRobot {
 
          drCmd = -0.5 * orientation * Math.abs(gain);
       }
-      if (buttonA) {
+      if (buttonA && (drCmd < 0.03)) {
          desiredAngle = 0;
          backLeftSpinAngle = -45;
          backRightSpinAngle = 45;
@@ -356,8 +374,72 @@ public class Robot extends TimedRobot {
 
          drCmd = 0 * orientation;
       }
+      //next two sections deal with zeroing yaw
+      d_yaw = Double.valueOf(yaw);
+
+      //ZERO YAW
+      if (buttonB && (drCmd < 0.03)) {
+         desiredAngle = 0;
+         backLeftSpinAngle = 45;
+         backRightSpinAngle = -45;
+         frontLeftSpinAngle =-45;
+         frontRightSpinAngle =45;
+         backLeftDriveGain =1;
+         backRightDriveGain =-1;
+         frontLeftDriveGain= 1;
+         frontRightDriveGain = -1;
+
+         drCmd = (desiredYaw-d_yaw)*0.009* orientation;
+         if (drCmd > 0.4) {drCmd = 0.4;}
+         if (drCmd < -0.4) {drCmd = -0.4;}
+      }
 
 
+      // yaw compensation logic, if driving straight, try to zero yaw
+	   
+      if (d_yaw > 20) {d_yaw = 20;}
+      if (d_yaw < -20) {d_yaw = -20;}
+	  
+	   if ((-10 < desiredAngle) && (desiredAngle < 10) && (drCmd > 0.1)&&yawCompensationEnable) {
+         if (yaw > 1) {
+			   backRightDriveGain  = backRightDriveGain * (1 + (d_yaw*0.1));
+			   frontRightDriveGain = frontRightDriveGain * (1 + (d_yaw*0.1));
+		   }
+	   }
+	  
+	   if (((-170 > desiredAngle) || (desiredAngle > 170)) && (drCmd > 0.1)&&yawCompensationEnable) {
+		   if (yaw < -1) {
+			   backRightDriveGain  = backRightDriveGain * (1 - (d_yaw*0.1));
+			   frontRightDriveGain = frontRightDriveGain * (1 - (d_yaw*0.1));
+		   }
+	   }
+
+      currentAngle = frontLeftEncoder.getPosition();
+
+      desiredAngle  = angleWrap(currentAngle, desiredAngle);
+
+
+      // Here 
+      if (desiredAngle >= -0.01) {
+         desiredAngleFlipped = desiredAngle - 180;
+         if (desiredAngleFlipped < -180) {
+            desiredAngleFlipped = -180;
+         } 
+      } else {
+         desiredAngleFlipped = desiredAngle + 180; 
+      }
+      if (Math.abs(frontLeftEncoder.getPosition() - desiredAngle)
+          > Math.abs(frontLeftEncoder.getPosition() - desiredAngleFlipped)) 
+      {
+         desiredAngle = desiredAngleFlipped;
+         backLeftDriveGain   = -backLeftDriveGain;
+         backRightDriveGain  = -backRightDriveGain;
+         frontLeftDriveGain  = -frontLeftDriveGain;
+         frontRightDriveGain = -frontRightDriveGain;
+         debug = 2;
+      } else  {
+         debug = 1;
+      }
 
       filteredAngle = prevDesiredAngle + (0.1*(desiredAngle - prevDesiredAngle));
 
@@ -378,26 +460,40 @@ public class Robot extends TimedRobot {
          frontRightDriveGain =1- 3*(0.25-turnGain);
       }*/ 
 
-
-      if (counter > 9)
+      //drCmd = prevDrCmd + (0.25*(drCmd - prevDrCmd)); 
+      if (debug_timer > 4)
       {
          /*myBooleanLog.append(true);
          myDoubleLog.append(yaw);
          myStringLog.append("yaw");
          //myBooleanLog.append(true);*/
-         myDoubleLog.append(filteredAngle);
-         myStringLog.append("x");
+         //myDoubleLog.append(debug);
+         //myStringLog.append("de");
          //myBooleanLog.append(true);
-         myDoubleLog.append(backRightEncoder.getPosition());
-         myStringLog.append("y");
-         counter = 0;
+         myDoubleLog.append(e_armWinch.getPosition());
+         myDoubleLog.append(brcmd);
+         //myStringLog.append("y");
+         debug_timer = 0;
       } else {
-         counter = counter +1;
-      }
+         debug_timer = debug_timer +1;
+      }   
+      
+      //arm logic
+      armPivotError = desiredArmTarget-e_armPivot.getPosition();
+      armPivotPower = Kp_arm*(armPivotError) + Kd_arm*(armPivotError-prevArmPivotError);
+      m_armPivot.set(armPivotPower);
+      prevArmPivotError = armPivotError;
 
+      //arm winch logic
+      double Kp_winch = 0.1;
+
+      armWinchPower = Kp_winch * (desiredWinchTarget-currentWinchPosition);
+      m_armWinch.set(armWinchPower);
+
+      prevDrCmd = drCmd;
       m_frontLeftDrive.set(drCmd*frontLeftDriveGain);
       m_frontRightDrive.set(drCmd*frontRightDriveGain);
-      m_backLeftDrive.set(-drCmd*backLeftDriveGain);
+      m_backLeftDrive.set(drCmd*backLeftDriveGain);
       m_backRightDrive.set(drCmd*backRightDriveGain);
 	  
       m_frontLeftSteer.set(flcmd);
@@ -405,7 +501,10 @@ public class Robot extends TimedRobot {
       m_backLeftSteer.set(blcmd);
       m_backRightSteer.set(brcmd);
    }
-
+//
+// Drive Forward Inches
+// used in autonomous mode
+//
    public boolean driveForwardInches(double inches, double power){
       boolean complete = false; 
     
@@ -459,7 +558,10 @@ public class Robot extends TimedRobot {
      }
      return(complete);
    }
-
+//
+// Drive Right Inches
+// used in autonomous mode (not currently working)
+//
    public boolean driveRightInches (double inches, double power){
       boolean complete = false; 
       double blcmd;
@@ -500,7 +602,10 @@ public class Robot extends TimedRobot {
       }
       return(complete);
    }
-
+//
+// Balance Pitch
+// used in autonomous mode to balance on the charging station
+//
    public boolean balancePitch(double power){
       boolean complete = false; 
       double blcmd;
@@ -519,11 +624,9 @@ public class Robot extends TimedRobot {
       }
       
       if (timeInit == false)  {
-         //time1 = Timer.getFPGATimestamp();
          timeInit = true;
          pitchCounter = 0;
       }
-      //time2 = Timer.getFPGATimestamp();
     
       if ((pitch) < (-5.0)) {
          flcmd = power;
@@ -556,7 +659,11 @@ public class Robot extends TimedRobot {
       }
       return(complete);
    }
-   
+//
+// Wheel Angle - Proporational control of wheel angle
+// used in teleop mode
+// outputs the power command for the steer wheel
+//
    public double wheelAngle(double desiredAngle, double currentAngle)
    {
       double powerCmd;
@@ -570,6 +677,93 @@ public class Robot extends TimedRobot {
 
       return(powerCmd);
    }
+//
+// Angle Angle - attempts to set the desired gear in the same
+// 0-360 or 360-720 etc range
+// used in teleop mode
+// NOTE:  THIS COULD BE IMPROVED
+//
+   public double angleWrap(double current, double desired)
+   {
+      if ((current < -450)) {
+         if (desired > 90) {
+            return(desired - 720);
+         }
+      }
+      if ((current > 450)) {
+         if (desired < -90) {
+            return(desired + 720);
+         }
+      }
+      if ((current > 90)) {
+         if (desired < -90) {
+            return(desired + 360);
+         }
+      }
+      if ((current < -90)) {
+         if (desired > 90) {
+            return(desired - 360);
+         }
+      }
+      return(desired);
+   }
+
+   public static double armTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition)
+   {
+      double target; 
+      target = prevTgt; 
+      if (a) {
+         if (winchPosition < 3){
+            target = 0; 
+         } else {
+            target = 5;
+         }
+      }
+
+      if (b) {
+         if (winchPosition < 3){
+            target = 2; 
+         } else {
+            target = 5;
+         }
+      }
+
+      if (y) {
+         target = 9;
+      }
+
+      if (x) {
+         target = 11; 
+      }
+      return target;
+   }
+   
+   public static double winchTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition)
+   {
+      double target; 
+      target = prevTgt; 
+      if (a) {
+         target = 0; 
+      }
+
+      if (b) {
+         target = 0;
+      }
+
+      if (y) {
+         target = -25;
+      }
+
+      if (x) {
+         target = -50; 
+      }
+      return target;
+   }
+
+}
+
+
+
 
   /* public static double closestAngle(double a, double b)
    {
@@ -596,21 +790,3 @@ public class Robot extends TimedRobot {
     directionController.enable();
 }
 */
-   public void setDirection(double setpoint)
-   {
-     /*  if (Math.abs(setpointAngle) <= Math.abs(setpointAngleFlipped))
-      {
-         // unflip the motor direction use the setpoint
-         //directionMotor.setGain(1.0);
-         //directionController.setSetpoint(currentAngle + setpointAngle);
-      }
-      // if the closest angle to setpoint + 180 is shorter
-      else
-      {
-         // flip the motor direction and use the setpoint + 180
-         //directionMotor.setGain(-1.0);
-         //directionController.setSetpoint(currentAngle + setpointAngleFlipped);
-      }*/
-   }
-}
-
