@@ -54,6 +54,16 @@ public class Robot extends TimedRobot {
    private double frontLeftSpinAngle;
    private double frontRightSpinAngle;
 
+   private double frontRightSpinErrorSum;
+   private double backRightSpinErrorSum;
+   private double frontLeftSpinErrorSum;
+   private double backLeftSpinErrorSum;
+
+   private double frontRightSpinError; 
+   private double backRightSpinError;
+   private double frontLeftSpinError;
+   private double backLeftSpinError;
+
    private double armPivotPower;
    private double armWinchPower; 
    private double Kp_arm;
@@ -117,9 +127,22 @@ public class Robot extends TimedRobot {
       m_frontRightDrive.setInverted(false);
       m_backLeftDrive.setInverted(false);  
       m_backRightDrive.setInverted(false);  
-
+       frontLeftEncoder.setPosition(0);
+       frontRightEncoder.setPosition(0);
+       backLeftEncoder.setPosition(0);
+       backRightEncoder.setPosition(0);
       m_armPivot.setInverted(false); 
       m_armWinch.setInverted(false);   
+
+      frontRightSpinErrorSum = 0;
+      backRightSpinErrorSum = 0;
+      frontLeftSpinErrorSum = 0;
+      backLeftSpinErrorSum = 0;
+
+      frontRightSpinError = 0;
+      backRightSpinError = 0;
+      frontLeftSpinError = 0;
+      backLeftSpinError = 0;
 
       timeInit = false;
       counter = 0;
@@ -139,8 +162,8 @@ public class Robot extends TimedRobot {
 
       debug_timer = 0;
 
-      Kp_arm = 0.025; 
-      Kd_arm = 0.004; 
+      Kp_arm = 0.035; 
+      Kd_arm = 0.065; 
 	  
 	   e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
       e_frontRightDrive = m_frontRightDrive.getEncoder();
@@ -174,13 +197,14 @@ public class Robot extends TimedRobot {
       pitch =   gyro.getPitch();
       switch(state) {
          case 0: 
-            if(driveForwardInches(36, 0.25)) {
+            if(driveForwardInches(15, 0.1)) {
                state++;
+               
                //state++; //jump to state 2 
             }
          break;
          case 1:
-            if(balancePitch(0.1)) {
+            if(balancePitch(0.08)) {
                state++;
                pitchCounter = 0;
             }
@@ -214,6 +238,7 @@ public class Robot extends TimedRobot {
       boolean leftBumper;
       boolean rightBumper;
 	   double d_yaw;
+      double other_yaw;
       double yawInit;
       double gainTgt;
       double togglePad;
@@ -235,6 +260,8 @@ public class Robot extends TimedRobot {
       boolean button2X; 
       boolean left2Bumper;
       boolean right2Bumper;
+      double leftTrigger;
+      double rightTrigger;
 
       joyXPos = m_driverController.getRightX();//m_leftStick.getX();
       joyYPos = m_driverController.getRightY();//m_leftStick.getY();
@@ -244,6 +271,9 @@ public class Robot extends TimedRobot {
       buttonA = m_driverController.getAButton();
       buttonB = m_driverController.getBButton();
       buttonY = m_driverController.getYButton();
+
+      leftTrigger = m_driverController.getLeftTriggerAxis();
+      rightTrigger = m_driverController.getRightTriggerAxis();
 
       button2A = m_armController.getAButton();
       button2B = m_armController.getBButton();
@@ -361,6 +391,7 @@ public class Robot extends TimedRobot {
 
          drCmd = -0.5 * orientation * Math.abs(gain);
       }
+
       if (buttonA && (drCmd < 0.03)) {
          desiredAngle = 0;
          backLeftSpinAngle = -45;
@@ -375,8 +406,35 @@ public class Robot extends TimedRobot {
          drCmd = 0 * orientation;
       }
       //next two sections deal with zeroing yaw
-      d_yaw = Double.valueOf(yaw);
+      other_yaw = Double.valueOf(yaw);
 
+      if (rightTrigger > 0.5){
+         desiredAngle = 0;
+         backLeftSpinAngle = 45;
+         backRightSpinAngle = -45;
+         frontLeftSpinAngle =-45;
+         frontRightSpinAngle =45;
+         backLeftDriveGain =1;
+         backRightDriveGain =-1;
+         frontLeftDriveGain= 1;
+         frontRightDriveGain = -1;
+
+         drCmd = -0.15;
+       }
+       if (leftTrigger > 0.5) {
+         desiredAngle = 0;
+         backLeftSpinAngle = 45;
+         backRightSpinAngle = -45;
+         frontLeftSpinAngle =-45;
+         frontRightSpinAngle =45;
+         backLeftDriveGain =1;
+         backRightDriveGain =-1;
+         frontLeftDriveGain= 1;
+         frontRightDriveGain = -1;
+
+         drCmd = 0.15;
+       }
+       d_yaw = Double.valueOf(yaw);
       //ZERO YAW
       if (buttonB && (drCmd < 0.03)) {
          desiredAngle = 0;
@@ -397,23 +455,24 @@ public class Robot extends TimedRobot {
 
       // yaw compensation logic, if driving straight, try to zero yaw
 	   
-      if (d_yaw > 20) {d_yaw = 20;}
-      if (d_yaw < -20) {d_yaw = -20;}
-	  
-	   if ((-10 < desiredAngle) && (desiredAngle < 10) && (drCmd > 0.1)&&yawCompensationEnable) {
-         if (yaw > 1) {
-			   backRightDriveGain  = backRightDriveGain * (1 + (d_yaw*0.1));
-			   frontRightDriveGain = frontRightDriveGain * (1 + (d_yaw*0.1));
-		   }
-	   }
-	  
-	   if (((-170 > desiredAngle) || (desiredAngle > 170)) && (drCmd > 0.1)&&yawCompensationEnable) {
-		   if (yaw < -1) {
-			   backRightDriveGain  = backRightDriveGain * (1 - (d_yaw*0.1));
-			   frontRightDriveGain = frontRightDriveGain * (1 - (d_yaw*0.1));
-		   }
-	   }
 
+	   if (rightTrigger < 0.4 && (leftTrigger < 0.4)) {
+         if (d_yaw > 20) {d_yaw = 20;}
+         if (d_yaw < -20) {d_yaw = -20;}
+	      if ((-10 < desiredAngle) && (desiredAngle < 10) && (drCmd > 0.1)&&yawCompensationEnable) {
+            if (yaw > 1) {
+			      backRightDriveGain  = backRightDriveGain * (1 + (d_yaw*0.1));
+			      frontRightDriveGain = frontRightDriveGain * (1 + (d_yaw*0.1));
+		      }
+	      }
+	  
+	      if (((-170 > desiredAngle) || (desiredAngle > 170)) && (drCmd > 0.1)&&yawCompensationEnable) {
+		      if (yaw < -1) {
+			      backRightDriveGain  = backRightDriveGain * (1 - (d_yaw*0.1));
+			      frontRightDriveGain = frontRightDriveGain * (1 - (d_yaw*0.1));
+		      }
+	      }
+      }
       currentAngle = frontLeftEncoder.getPosition();
 
       desiredAngle  = angleWrap(currentAngle, desiredAngle);
@@ -443,11 +502,22 @@ public class Robot extends TimedRobot {
 
       filteredAngle = prevDesiredAngle + (0.1*(desiredAngle - prevDesiredAngle));
 
-      flcmd = -wheelAngle(filteredAngle+frontLeftSpinAngle,frontLeftEncoder.getPosition());
-      frcmd = wheelAngle(filteredAngle+frontRightSpinAngle,frontRightEncoder.getPosition());      
-      blcmd = -wheelAngle(filteredAngle+backLeftSpinAngle,backLeftEncoder.getPosition());
-      brcmd = -wheelAngle(filteredAngle+backRightSpinAngle,backRightEncoder.getPosition());
-         
+      //error =(desiredAngle - currentAngle);
+      frontRightSpinError = filteredAngle+frontRightSpinAngle-frontRightEncoder.getPosition();
+      backRightSpinError = filteredAngle+backRightSpinAngle-backRightEncoder.getPosition();
+      frontLeftSpinError = filteredAngle+frontLeftSpinAngle-frontLeftEncoder.getPosition();
+      backLeftSpinError = filteredAngle+backLeftSpinAngle-backLeftEncoder.getPosition();
+      
+      frontRightSpinErrorSum = frontRightSpinErrorSum+frontRightSpinError*0.02;
+      backRightSpinErrorSum = backRightSpinErrorSum+backRightSpinError*0.02;
+      frontLeftSpinErrorSum = frontLeftSpinErrorSum+frontLeftSpinError*0.02;
+      backLeftSpinErrorSum = backLeftSpinErrorSum+backLeftSpinError*0.02;
+
+      flcmd = -wheelAngle(frontLeftSpinError,frontLeftSpinErrorSum);
+      frcmd = wheelAngle(frontRightSpinError, frontRightSpinErrorSum);       
+      blcmd = -wheelAngle(backLeftSpinError,backLeftSpinErrorSum);
+      brcmd = -wheelAngle(backRightSpinError,backRightSpinErrorSum);
+      
       prevDesiredAngle = filteredAngle;
 
      /* if (Math.abs(flcmd) > 0.05) {
@@ -469,9 +539,16 @@ public class Robot extends TimedRobot {
          //myBooleanLog.append(true);*/
          //myDoubleLog.append(debug);
          //myStringLog.append("de");
-         //myBooleanLog.append(true);
-         myDoubleLog.append(e_armWinch.getPosition());
-         myDoubleLog.append(brcmd);
+         //myBooleanLog.append(true);filteredAngle
+         myDoubleLog.append(other_yaw);
+
+       //  myDoubleLog.append(frontRightSpinAngle);
+       //  myDoubleLog.append(frontRightEncoder.getPosition());
+       //  myDoubleLog.append(frcmd);
+
+       //  myDoubleLog.append(backRightSpinAngle);
+        // myDoubleLog.append(backRightEncoder.getPosition());
+       //  myDoubleLog.append(brcmd);
          //myStringLog.append("y");
          debug_timer = 0;
       } else {
@@ -507,31 +584,37 @@ public class Robot extends TimedRobot {
 //
    public boolean driveForwardInches(double inches, double power){
       boolean complete = false; 
-    
-      if (counter > 9)
-      {
-         myBooleanLog.append(true);
-         myDoubleLog.append(pitch);
-         myStringLog.append("distance");
-         counter = 0;
-      } else {
-         counter = counter +1;
-      }
-      distance = e_frontLeftDrive.getPosition();
+      double driveYaw;
+      double leftPwr;
+      double rightPwr;
+      rightPwr = 0.0;
+      leftPwr = 0.0;
+      driveYaw = Double.valueOf(yaw);
+
+
+      distance = -e_frontLeftDrive.getPosition();
       if (timeInit == false)  {
          distanceInit = distance;
          timeInit = true;
       }
     
       if ((distance - distanceInit) < (inches*0.56)) {
-         flcmd = power;
-         frcmd = power;
-         blcmd = -power;
-         brcmd = power;
+         if (driveYaw > 0) {
+            rightPwr = 0.0009*(driveYaw);
+         } else {
+            leftPwr = -0.0009*(driveYaw);
+         }
+
+         flcmd = -power+leftPwr;
+         frcmd = -power+rightPwr;
+         blcmd = -power+leftPwr;
+         brcmd = -power+rightPwr;
+
          m_frontLeftDrive.set(flcmd);
          m_frontRightDrive.set(frcmd);
          m_backLeftDrive.set(blcmd);
          m_backRightDrive.set(brcmd);
+         
      } else {
          m_frontLeftDrive.set(0.0);
          m_frontRightDrive.set(0.0);
@@ -548,9 +631,9 @@ public class Robot extends TimedRobot {
 	  
      if (counter > 9)
      {
-        myBooleanLog.append(true);
-        myDoubleLog.append(distance);
-        myStringLog.append("d");
+        myDoubleLog.append(rightPwr);
+        myDoubleLog.append(driveYaw);
+        //myStringLog.append("d");
 
         counter = 0;
      } else {
@@ -628,20 +711,20 @@ public class Robot extends TimedRobot {
          pitchCounter = 0;
       }
     
-      if ((pitch) < (-5.0)) {
-         flcmd = power;
-         frcmd = power;
+      if ((pitch) > (5.0)) {
+         flcmd = -power;
+         frcmd = -power;
          blcmd = -power;
-         brcmd = power;
+         brcmd = -power;
          m_frontLeftDrive.set(flcmd);
          m_frontRightDrive.set(frcmd);
          m_backLeftDrive.set(blcmd);
          m_backRightDrive.set(brcmd);
-      } else if(pitch > 5.0) {
-         flcmd = -power*0.5;
-         frcmd = -power*0.5;
-         blcmd = power*0.5;
-         brcmd = -power*0.5;
+      } else if(pitch < (-5.0)) {
+         flcmd = power*0.75;
+         frcmd = power*0.75;
+         blcmd = power*0.75;
+         brcmd = power*0.75;
          m_frontLeftDrive.set(flcmd);
          m_frontRightDrive.set(frcmd);
          m_backLeftDrive.set(blcmd);
@@ -664,13 +747,14 @@ public class Robot extends TimedRobot {
 // used in teleop mode
 // outputs the power command for the steer wheel
 //
-   public double wheelAngle(double desiredAngle, double currentAngle)
+   public double wheelAngle(double error, double errorSum)
    {
       double powerCmd;
       double kp = 0.005;
-      double maxPwr = 0.5;
+      double ki = 0.01;
+      double maxPwr = 0.4;
 
-      powerCmd = (kp * (desiredAngle - currentAngle));
+      powerCmd = (kp * error) + (ki * errorSum);
 
       if (powerCmd > maxPwr){powerCmd = maxPwr;}
       if (powerCmd < -maxPwr){powerCmd = -maxPwr;}
@@ -722,7 +806,7 @@ public class Robot extends TimedRobot {
 
       if (b) {
          if (winchPosition < 3){
-            target = 2; 
+            target = 4; 
          } else {
             target = 5;
          }
@@ -733,7 +817,7 @@ public class Robot extends TimedRobot {
       }
 
       if (x) {
-         target = 11; 
+         target = 15; 
       }
       return target;
    }
