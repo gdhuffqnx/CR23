@@ -42,7 +42,7 @@ public class Robot extends TimedRobot {
    CANCoder backRightEncoder = new CANCoder(2);
    CANCoder backLeftEncoder = new CANCoder(3);
 
-   private final Solenoid m_solenoid = new Solenoid(PneumaticsModuleType.REVPH, 0);
+   //private final Solenoid m_solenoid = new Solenoid(PneumaticsModuleType.REVPH, 0);
    private final Compressor m_compressor = new Compressor(12, PneumaticsModuleType.REVPH);
 
    private boolean timeInit;
