@@ -2,6 +2,8 @@
 // Control Freaks
 // Vicksburg High School
 // Michigan
+// this is a time based program
+//
 
 package frc.robot;
 
@@ -18,7 +20,7 @@ import edu.wpi.first.wpilibj.DataLogManager;
 //import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.PneumaticsModuleType;
 import edu.wpi.first.wpilibj.Compressor;
-import edu.wpi.first.wpilibj.Solenoid;
+//import edu.wpi.first.wpilibj.Solenoid;
 import com.kauailabs.navx.frc.AHRS;
 import edu.wpi.first.wpilibj.SPI;
 import com.ctre.phoenix.sensors.CANCoder;
@@ -33,7 +35,6 @@ public class Robot extends TimedRobot {
    //private Joystick m_rightStick;
    private final XboxController m_driverController = new XboxController(0);
    private final XboxController m_armController = new XboxController(1);
-
 
    private final DigitalOutput m_digital = new DigitalOutput(0);
 
@@ -58,7 +59,7 @@ public class Robot extends TimedRobot {
    private double prevDesiredAngle;
    private double prevGain;
    private double prevDrCmd;
-   private double prevArmWinch; 
+
    private double backLeftSpinAngle;
    private double backRightSpinAngle;
    private double frontLeftSpinAngle;
@@ -75,9 +76,7 @@ public class Robot extends TimedRobot {
    private double backLeftSpinError;
 
    private double armPivotPower;
-   private double armWinchPower; 
-   private double Kp_arm;
-   private double Kd_arm; 
+   private double armWinchPower;  
 
    private double backLeftDriveGain;
    private double backRightDriveGain;
@@ -98,7 +97,6 @@ public class Robot extends TimedRobot {
    private int state; 
    float pitch;
    float yaw;
-   private int angleCounter;
    int debug_timer;
 
    BooleanLogEntry myBooleanLog;
@@ -121,9 +119,9 @@ public class Robot extends TimedRobot {
    private final CANSparkMax m_armWinch = new CANSparkMax(10,MotorType.kBrushless); 
 
    private RelativeEncoder e_frontLeftDrive;
-   private RelativeEncoder e_frontRightDrive;
-   private RelativeEncoder e_backLeftDrive;
-   private RelativeEncoder e_backRightDrive;
+   //private RelativeEncoder e_frontRightDrive;
+   //private RelativeEncoder e_backLeftDrive;
+   //private RelativeEncoder e_backRightDrive;
 
    private RelativeEncoder e_armPivot;
    private RelativeEncoder e_armWinch;
@@ -168,22 +166,18 @@ public class Robot extends TimedRobot {
       yaw = 0;
       prevDesiredAngle = 0;
       prevGain = 0;
-      angleCounter = 0;
+
       prevDrCmd = 0;
       prevArmTarget = 0; 
-      prevArmWinch = 0;
       prevArmPivotError = 0; 
       gyro.calibrate();
 
       debug_timer = 0;
-
-      Kp_arm = 0.035; 
-      Kd_arm = 0.065; 
 	  
 	   e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
-      e_frontRightDrive = m_frontRightDrive.getEncoder();
-      e_backLeftDrive   = m_backLeftDrive.getEncoder();
-      e_backRightDrive  = m_backRightDrive.getEncoder();
+      //e_frontRightDrive = m_frontRightDrive.getEncoder();
+      //e_backLeftDrive   = m_backLeftDrive.getEncoder();
+      //e_backRightDrive  = m_backRightDrive.getEncoder();
       e_armPivot        = m_armPivot.getEncoder();
       e_armWinch        = m_armWinch.getEncoder();
 
@@ -345,6 +339,7 @@ public class Robot extends TimedRobot {
       frontLeftDriveGain= 1;
       frontRightDriveGain = 0.9;
       
+      // rotate the robot
       if ((togglePad) > 0.75){
          desiredAngle = 0;
          backLeftSpinAngle = 45;
@@ -499,14 +494,21 @@ public class Robot extends TimedRobot {
          debug = 1;
       }
 
+      // simple filter to smooth out angle change
       filteredAngle = prevDesiredAngle + (0.1*(desiredAngle - prevDesiredAngle));
 
-      //error =desired - current
+      //
+      // wheel spin
+      // error = desired - current
+      //
       frontRightSpinError = filteredAngle+frontRightSpinAngle-frontRightEncoder.getPosition();
       backRightSpinError = filteredAngle+backRightSpinAngle-backRightEncoder.getPosition();
       frontLeftSpinError = filteredAngle+frontLeftSpinAngle-frontLeftEncoder.getPosition();
       backLeftSpinError = filteredAngle+backLeftSpinAngle-backLeftEncoder.getPosition();
-      
+     
+      //
+      // needed for I term which isn't essential for wheel spin control
+      //
       frontRightSpinErrorSum = frontRightSpinErrorSum+frontRightSpinError*TIME_STEP;
       backRightSpinErrorSum = backRightSpinErrorSum+backRightSpinError*TIME_STEP;
       frontLeftSpinErrorSum = frontLeftSpinErrorSum+frontLeftSpinError*TIME_STEP;
@@ -519,36 +521,30 @@ public class Robot extends TimedRobot {
       
       prevDesiredAngle = filteredAngle;
 
+      // telemtry information, feel free to change as needed
       if (debug_timer > 4)
       {
          myBooleanLog.append(right2Bumper);
          //myDoubleLog.append(rightTrigger);
          //myDoubleLog.append(frontRightSpinAngle);
          //myDoubleLog.append(frontRightEncoder.getPosition());
-         //myDoubleLog.append(frcmd);
-         //myDoubleLog.append(backRightSpinAngle);
-         //myDoubleLog.append(backRightEncoder.getPosition());
          //myDoubleLog.append(brcmd);
          debug_timer = 0;
       } else {
          debug_timer = debug_timer +1;
       }   
       
-      //arm logic
+      //arm pivot logic uses a PD controller
       armPivotError = desiredArmTarget-e_armPivot.getPosition();
-      armPivotPower = Kp_arm*(armPivotError) + Kd_arm*(armPivotError-prevArmPivotError);
+      armPivotPower = determinePivotPower(armPivotError,prevArmPivotError);
       m_armPivot.set(armPivotPower);
       prevArmPivotError = armPivotError;
 
-if (right2Bumper) {
-      m_digital.set(true);
-   } else {
-   m_digital.set(false);
-}
-      //arm winch logic
-      double Kp_winch = 0.1;
+      //open or close the pneumatic grabber
+      m_digital.set(right2Bumper);
 
-      armWinchPower = Kp_winch * (desiredWinchTarget-currentWinchPosition);
+      //arm winch logic uses a P controller
+      armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition); 
       m_armWinch.set(armWinchPower);
 
       prevDrCmd = drCmd;
@@ -613,6 +609,7 @@ if (right2Bumper) {
      m_backLeftSteer.set(0.0);
      m_backRightSteer.set(0.0);
 	  
+     // telemtry
      if (counter > 9)
      {
         myDoubleLog.append(rightPwr);
@@ -627,6 +624,7 @@ if (right2Bumper) {
    //
    // Balance Pitch
    // used in autonomous mode to balance on the charging station
+   // specific to the 2023 FRC game
    //
    public boolean balancePitch(double power){
       boolean complete = false; 
@@ -783,6 +781,20 @@ if (right2Bumper) {
       return target;
    }
 
+   public static double determineWinchPower(double desiredPos, double currentPos) {
+      double Kp_winch = 0.1;
+      
+      return(Kp_winch * (desiredPos-currentPos));
+   }
+
+   public static double determinePivotPower(double error, double prevError) {
+      double Kp_arm = 0.035;
+      double Kd_arm = 0.065;
+
+      return(Kp_arm*(error) + Kd_arm*(error-prevError));
+
+   }
+   
    public static double determineDesiredAngle(double joyX, double joyY) {   
       if ((joyX > 0.1)&&(joyY < -0.1)) {
          return(-57.3*Math.atan(Math.abs(joyY/joyX)));
