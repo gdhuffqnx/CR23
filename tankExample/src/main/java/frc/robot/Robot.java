@@ -27,6 +27,7 @@ import com.ctre.phoenix.sensors.CANCoder;
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.RelativeEncoder;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
+import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DigitalOutput;
 
 public class Robot extends TimedRobot {
@@ -36,7 +37,9 @@ public class Robot extends TimedRobot {
    private final XboxController m_driverController = new XboxController(0);
    private final XboxController m_armController = new XboxController(1);
 
-   private final DigitalOutput m_digital = new DigitalOutput(0);
+   private final DigitalInput m_armPivotLimitSwitch = new DigitalInput(1);
+   private final DigitalInput m_armWinchLimitSwitch = new DigitalInput(2);
+   private final DigitalOutput m_pincher = new DigitalOutput(0);
 
    CANCoder frontRightEncoder = new CANCoder(1);
    CANCoder frontLeftEncoder = new CANCoder(0);
@@ -93,7 +96,16 @@ public class Robot extends TimedRobot {
    public double armPivotError;
    public double prevArmPivotError;
    private double currentWinchPosition; 
-   
+   //private double filteredWinchTarget; 
+   private double  armPivotLimitPosition;   
+   private boolean armPivotLimitSwitch;
+   private double  armWinchLimitPosition;
+   private boolean armWinchLimitSwitch;
+
+   private double currentArmPosition;
+   private double desiredPivotTarget; 
+   private double desiredWinchTarget; 
+
    private int state; 
    float pitch;
    float yaw;
@@ -119,9 +131,9 @@ public class Robot extends TimedRobot {
    private final CANSparkMax m_armWinch = new CANSparkMax(10,MotorType.kBrushless); 
 
    private RelativeEncoder e_frontLeftDrive;
-   //private RelativeEncoder e_frontRightDrive;
-   //private RelativeEncoder e_backLeftDrive;
-   //private RelativeEncoder e_backRightDrive;
+   private RelativeEncoder e_frontRightDrive;
+   private RelativeEncoder e_backLeftDrive;
+   private RelativeEncoder e_backRightDrive;
 
    private RelativeEncoder e_armPivot;
    private RelativeEncoder e_armWinch;
@@ -137,6 +149,8 @@ public class Robot extends TimedRobot {
       m_frontRightDrive.setInverted(false);
       m_backLeftDrive.setInverted(false);  
       m_backRightDrive.setInverted(false);  
+      //e_armPivot.setPosition(newPosition: 0);
+      //e_armWinch.setPosition(0);
       frontLeftEncoder.setPosition(0);
       frontRightEncoder.setPosition(0);
       backLeftEncoder.setPosition(0);
@@ -157,7 +171,8 @@ public class Robot extends TimedRobot {
       yawFlipError = 0.0;
       yawFlipErrorSum = 0.0;
       prevYawFlipError = 0.0;
-
+      armPivotLimitPosition = 0; 
+      armWinchLimitPosition = 0;
       timeInit = false;
       counter = 0;
       pitchCounter = 0;
@@ -175,9 +190,9 @@ public class Robot extends TimedRobot {
       debug_timer = 0;
 	  
 	   e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
-      //e_frontRightDrive = m_frontRightDrive.getEncoder();
-      //e_backLeftDrive   = m_backLeftDrive.getEncoder();
-      //e_backRightDrive  = m_backRightDrive.getEncoder();
+      e_frontRightDrive = m_frontRightDrive.getEncoder();
+      e_backLeftDrive   = m_backLeftDrive.getEncoder();
+      e_backRightDrive  = m_backRightDrive.getEncoder();
       e_armPivot        = m_armPivot.getEncoder();
       e_armWinch        = m_armWinch.getEncoder();
 
@@ -198,22 +213,54 @@ public class Robot extends TimedRobot {
    @Override
    public void autonomousPeriodic() {
       yaw = gyro.getYaw();
+      currentArmPosition = e_armPivot.getPosition();
       pitch =   gyro.getPitch();
       switch(state) {
-         case 0: 
+         case 0:
+            armPivotLimitSwitch = m_armPivotLimitSwitch.get();
+            armWinchLimitSwitch = m_armWinchLimitSwitch.get();
+            if (armPivotLimitSwitch) {
+               armPivotLimitPosition = currentArmPosition; 
+               if (armWinchLimitSwitch) {
+                  armWinchLimitPosition = currentWinchPosition;
+                  state++;
+               }
+            }
+            if (armWinchLimitSwitch) {
+               armWinchLimitPosition = currentWinchPosition;
+            }
+            desiredPivotTarget = determinePivotTarget(false, false, false, false, prevArmTarget, currentArmPosition, -0.523, armPivotLimitSwitch, armPivotLimitPosition);
+            prevArmTarget = desiredPivotTarget; 
+            armPivotError = desiredPivotTarget-currentArmPosition;
+            armPivotPower = determinePivotPower(armPivotError,prevArmPivotError);
+            m_armPivot.set(armPivotPower);
+            prevArmPivotError = armPivotError;
+         break;
+         case 1:
+            desiredPivotTarget = determinePivotTarget(false, false, true, false, prevArmTarget, currentArmPosition, 0.0, armPivotLimitSwitch, armPivotLimitPosition);
+            prevArmTarget = desiredPivotTarget; 
+            armPivotError = desiredPivotTarget-currentArmPosition;
+            armPivotPower = determinePivotPower(armPivotError,prevArmPivotError);
+            m_armPivot.set(armPivotPower);
+            prevArmPivotError = armPivotError;
+            if (Math.abs(armPivotError) < 1.0) {
+               state++;
+            }
+         break;
+         case 2: 
             if(driveForwardInches(15, 0.1)) {
                state++;
                
                //state++; //jump to state 2 
             }
          break;
-         case 1:
+         case 3:
             if(balancePitch(0.08)) {
                state++;
                pitchCounter = 0;
             }
          break;
-         case 2:
+         case 4:
          pitchCounter++;
             if(pitchCounter > 250) {
                //state++;
@@ -239,20 +286,20 @@ public class Robot extends TimedRobot {
       double filteredAngle;
       double joyXPos;
       double joyYPos;
+      double joyWinch;
+      double joyPivot;
       boolean leftBumper;
       boolean rightBumper;
       double d_yaw;
       double other_yaw;
       double gainTgt;
       double togglePad;
-      boolean yawCompensationEnable = true;
+      boolean yawCompensationEnable = false;
       boolean buttonA;
       boolean buttonB;
       boolean buttonY; 
       double turnGain;
       double desiredYaw;
-      double desiredArmTarget; 
-      double desiredWinchTarget; 
       double currentAngle;
       int debug;
       debug = 0;
@@ -265,12 +312,15 @@ public class Robot extends TimedRobot {
       boolean right2Bumper;
       double leftTrigger;
       double rightTrigger;
+      
+      
 
       double kp_yaw;
       double ki_yaw;
       double kd_yaw;
-      
-      
+
+      armPivotLimitSwitch = m_armPivotLimitSwitch.get();
+      armWinchLimitSwitch = m_armWinchLimitSwitch.get();
 
       //Game Pad 1 - Driver
       joyXPos = m_driverController.getRightX();//m_leftStick.getX();
@@ -285,6 +335,8 @@ public class Robot extends TimedRobot {
       rightTrigger = m_driverController.getRightTriggerAxis();
 
 	  //Game Pad 2 - Arm control
+      joyWinch = -m_armController.getLeftY();
+      joyPivot = -m_armController.getRightY();
       button2A = m_armController.getAButton();
       button2B = m_armController.getBButton();
       button2Y = m_armController.getYButton();
@@ -301,17 +353,6 @@ public class Robot extends TimedRobot {
       drCmd = 0.0;
       yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
-
-      
-
-      //setting the arm angle and stuff
-      currentWinchPosition = e_armWinch.getPosition(); 
-
-      desiredArmTarget = armTarget(button2A, button2B, button2X, button2Y, prevArmTarget, currentWinchPosition);
-      prevArmTarget = desiredArmTarget; 
-
-      desiredWinchTarget = winchTarget(button2A, button2B, button2X, button2Y, prevArmTarget, currentWinchPosition);
-      prevWinchTarget = desiredWinchTarget; 
 
       //this gain is the drive wheel speed gain
       gainTgt = 0.25; 
@@ -335,9 +376,9 @@ public class Robot extends TimedRobot {
       frontLeftSpinAngle =0;
       frontRightSpinAngle =0;
       backLeftDriveGain =1;
-      backRightDriveGain =0.9;
+      backRightDriveGain = 0.8;
       frontLeftDriveGain= 1;
-      frontRightDriveGain = 0.9;
+      frontRightDriveGain = 0.8;
       
       // rotate the robot
       if ((togglePad) > 0.75){
@@ -381,7 +422,7 @@ public class Robot extends TimedRobot {
          drCmd = 0 * orientation;
       }
 
-      //next two sections deal with rotating the robot
+      //next two sections deal with rotating the robot 180 degrees
       // turning it around - yaw
       other_yaw = Double.valueOf(yaw);
       kp_yaw = 0.009;
@@ -451,6 +492,8 @@ public class Robot extends TimedRobot {
       }
 
       // yaw compensation logic, if driving straight, try to zero yaw
+      // can be disabled if yawCompensationEnable is set to false
+      //
       if ((rightTrigger < 0.4) && (leftTrigger < 0.4)) {
          if (d_yaw > 20) {d_yaw = 20;}
          if (d_yaw < -20) {d_yaw = -20;}
@@ -494,8 +537,8 @@ public class Robot extends TimedRobot {
          debug = 1;
       }
 
-      // simple filter to smooth out angle change
-      filteredAngle = prevDesiredAngle + (0.1*(desiredAngle - prevDesiredAngle));
+      // simple filter to smooth out angle change, this may have a minor bug
+      filteredAngle = prevDesiredAngle + (0.01*(desiredAngle - prevDesiredAngle));
 
       //
       // wheel spin
@@ -514,37 +557,42 @@ public class Robot extends TimedRobot {
       frontLeftSpinErrorSum = frontLeftSpinErrorSum+frontLeftSpinError*TIME_STEP;
       backLeftSpinErrorSum = backLeftSpinErrorSum+backLeftSpinError*TIME_STEP;
 
+      // calculate the required motor power command to get to desired wheel angle
       flcmd = -wheelAngle(frontLeftSpinError,  frontLeftSpinErrorSum);
       frcmd =  wheelAngle(frontRightSpinError, frontRightSpinErrorSum);       
       blcmd = -wheelAngle(backLeftSpinError,   backLeftSpinErrorSum);
       brcmd = -wheelAngle(backRightSpinError,  backRightSpinErrorSum);
       
       prevDesiredAngle = filteredAngle;
+      
+      //setting the arm angle and stuff
+      currentArmPosition = e_armPivot.getPosition();
+      currentWinchPosition = e_armWinch.getPosition(); 
 
-      // telemtry information, feel free to change as needed
-      if (debug_timer > 4)
-      {
-         myBooleanLog.append(right2Bumper);
-         //myDoubleLog.append(rightTrigger);
-         //myDoubleLog.append(frontRightSpinAngle);
-         //myDoubleLog.append(frontRightEncoder.getPosition());
-         //myDoubleLog.append(brcmd);
-         debug_timer = 0;
-      } else {
-         debug_timer = debug_timer +1;
-      }   
+      if (armPivotLimitSwitch) {
+         armPivotLimitPosition = currentArmPosition; 
+      }
+      desiredPivotTarget = determinePivotTarget(button2A, button2B, button2X, button2Y, prevArmTarget, currentWinchPosition, joyWinch, armPivotLimitSwitch, armPivotLimitPosition);
+      prevArmTarget = desiredPivotTarget; 
+      
+      if (armWinchLimitSwitch) {
+         armWinchLimitPosition = currentWinchPosition;
+      }
+      
+      desiredWinchTarget = determineWinchTarget(button2A, button2B, button2X, button2Y, prevWinchTarget, currentWinchPosition, joyPivot,armWinchLimitSwitch, armWinchLimitPosition);
+      prevWinchTarget = desiredWinchTarget; 
       
       //arm pivot logic uses a PD controller
-      armPivotError = desiredArmTarget-e_armPivot.getPosition();
+      armPivotError = desiredPivotTarget-currentArmPosition;
       armPivotPower = determinePivotPower(armPivotError,prevArmPivotError);
       m_armPivot.set(armPivotPower);
       prevArmPivotError = armPivotError;
 
       //open or close the pneumatic grabber
-      m_digital.set(right2Bumper);
+      m_pincher.set(!right2Bumper);
 
       //arm winch logic uses a P controller
-      armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition); 
+      armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
       m_armWinch.set(armWinchPower);
 
       prevDrCmd = drCmd;
@@ -557,6 +605,26 @@ public class Robot extends TimedRobot {
       m_frontRightSteer.set(frcmd);
       m_backLeftSteer.set(blcmd);
       m_backRightSteer.set(brcmd);
+      //e_frontLeftDrive.getPosition();
+      //e_frontRightDrive.getPosition();
+      //e_backLeftDrive.getPosition();
+      //e_backRightDrive.getPosition();
+      // telemtry information, feel free to change as needed
+      if (debug_timer > 9)
+      {
+         //myBooleanLog.append(armPivotLimitSwitch);
+         //myDoubleLog.append(armPivotLimitPosition);
+         //myDoubleLog.append(armWinchLimitPosition);
+         myDoubleLog.append(e_frontLeftDrive.getPosition());
+         myDoubleLog.append(e_frontRightDrive.getPosition());
+         myDoubleLog.append(e_backLeftDrive.getPosition());
+         myDoubleLog.append(e_backRightDrive.getPosition());
+         //myDoubleLog.append(frontRightEncoder.getPosition());
+         //myDoubleLog.append(brcmd);
+         debug_timer = 0;
+      } else {
+         debug_timer = debug_timer +1;
+      }   
    }
 //
 // Drive Forward Inches
@@ -680,16 +748,16 @@ public class Robot extends TimedRobot {
       return(complete);
    }
    //
-   // Wheel Angle - Proporational control of wheel angle
+   // Wheel Angle - PI control of wheel angle
    // used in teleop mode
    // outputs the power command for the steer wheel
    //
    public double wheelAngle(double error, double errorSum)
    {
       double powerCmd;
-      double kp = 0.005;
-      double ki = 0.01;
-      double maxPwr = 0.4;
+      double kp = 0.008;
+      double ki = 0.00;
+      double maxPwr = 0.5;
 
       powerCmd = (kp * error) + (ki * errorSum);
 
@@ -729,70 +797,100 @@ public class Robot extends TimedRobot {
       return(desired);
    }
 
-   public static double armTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition)
+   // determine the desired position of the arm pivot
+   public static double determinePivotTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition, double joyX, boolean limitSwitch, double zeroPosition)
    {
       double target; 
+      double gain = 1;
       target = prevTgt; 
       if (a) {
-         if (winchPosition < 3){
-            target = 0; 
+         if (winchPosition < 5) {
+            target = zeroPosition; 
          } else {
-            target = 5;
+            target = zeroPosition+10;
          }
       }
 
       if (b) {
-         if (winchPosition < 3){
-            target = 4; 
+         if (winchPosition < 5) {
+            target = zeroPosition+4; 
          } else {
-            target = 5;
+            target = zeroPosition+10;
          }
       }
 
       if (y) {
-         target = 9;
+         target = zeroPosition+21;
       }
 
       if (x) {
-         target = 15; 
+         target = zeroPosition+26; 
       }
-      return target;
+      if (joyX > 0.2) {
+         target = target + (joyX*gain);
+      }
+      if (joyX < -0.2) {
+         if (!limitSwitch) {
+            target = target + (joyX*gain);
+         }
+         //if (target < 0) {target = 0;}
+      }
+      
+      return (prevTgt+ (0.25*(target - prevTgt)));
    }
    
-   public static double winchTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition)
+   public static double determineWinchTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition, double joyY, boolean limitSwitch, double zeroPosition)
    {
       double target; 
+      double gain = 5;
       target = prevTgt; 
       if (a) {
-         target = 0; 
+         target = zeroPosition; 
       }
 
       if (b) {
-         target = 0;
+         target = zeroPosition+40*4;
       }
 
       if (y) {
-         target = -25;
+         target = zeroPosition+45*4;
       }
 
       if (x) {
-         target = -50; 
+         target = zeroPosition+90*4; 
       }
-      return target;
+      if (joyY > 0.2) {
+         target = target + (joyY*gain);
+      }
+      if (joyY < -0.2) {
+         if (!limitSwitch) {
+            target = target + (joyY*gain);
+         }
+         //if (target < 0) {target = 0;}
+      }
+      return(prevTgt+ (0.25*(target - prevTgt)));
+      //   return 
    }
 
-   public static double determineWinchPower(double desiredPos, double currentPos) {
-      double Kp_winch = 0.1;
-      
-      return(Kp_winch * (desiredPos-currentPos));
+   public static double determineWinchPower(double desiredPos, double currentPos, boolean limitSwitch) {
+      double Kp_winch = 0.05;
+      double winchPower;
+
+      winchPower = Kp_winch * (desiredPos-currentPos);
+
+      if (limitSwitch) {
+
+      } else {
+
+      }
+      return(winchPower); 
    }
 
    public static double determinePivotPower(double error, double prevError) {
-      double Kp_arm = 0.035;
-      double Kd_arm = 0.065;
+      double Kp_arm = 0.030;//0.035
+      double Kd_arm = 0.085;//0.065
 
       return(Kp_arm*(error) + Kd_arm*(error-prevError));
-
    }
    
    public static double determineDesiredAngle(double joyX, double joyY) {   
