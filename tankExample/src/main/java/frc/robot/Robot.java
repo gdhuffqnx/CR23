@@ -111,6 +111,7 @@ public class Robot extends TimedRobot {
    float pitch;
    float yaw;
    int debug_timer;
+   public int stateCounter;
 
    BooleanLogEntry myBooleanLog;
    DoubleLogEntry myDoubleLog;
@@ -158,6 +159,8 @@ public class Robot extends TimedRobot {
       backRightEncoder.setPosition(0);
       m_armPivot.setInverted(false); 
       m_armWinch.setInverted(false);   
+      
+      m_pincher.set(false);
 
       frontRightSpinErrorSum = 0;
       backRightSpinErrorSum = 0;
@@ -183,6 +186,7 @@ public class Robot extends TimedRobot {
       yaw = 0;
       prevDesiredAngle = 0;
       prevGain = 0;
+      stateCounter = 0;
 
       prevDrCmd = 0;
       prevArmTarget = 0; 
@@ -214,22 +218,69 @@ public class Robot extends TimedRobot {
 
    @Override
    public void autonomousPeriodic() {
+      
+
       yaw = gyro.getYaw();
       currentArmPosition = e_armPivot.getPosition();
       pitch =   gyro.getPitch();
+      armPivotLimitSwitch = m_armPivotLimitSwitch.get();
+      armWinchLimitSwitch = m_armWinchLimitSwitch.get();
+      currentArmPosition = e_armPivot.getPosition();
+      currentWinchPosition = e_armWinch.getPosition();
+
       switch(state) {
-         case 0:
-            armPivotLimitSwitch = m_armPivotLimitSwitch.get();
-            armWinchLimitSwitch = m_armWinchLimitSwitch.get();
-            if (armPivotLimitSwitch) {
-               armPivotLimitPosition = currentArmPosition; 
-               if (armWinchLimitSwitch) {
-                  armWinchLimitPosition = currentWinchPosition;
-                  state++;
-               }
-            }
-            if (armWinchLimitSwitch) {
+         case 0: // initalize
+            prevArmTarget = currentArmPosition;
+            prevWinchTarget = currentWinchPosition;
+            m_pincher.set(false); 
+            armWinchLimitPosition = 0.0;
+            stateCounter = 0;
+            debug_timer = 0;
+            state++;
+         break;
+         case 1: //crank in winch to calibrate position
+            desiredWinchTarget = determineWinchTarget(false, false, false, false, prevWinchTarget, currentWinchPosition, -1,armWinchLimitSwitch, armWinchLimitPosition);
+            prevWinchTarget = desiredWinchTarget; 
+            armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
+            m_armWinch.set(armWinchPower);
+            stateCounter++;
+            if (armWinchLimitSwitch || stateCounter > 300) {
+               //m_armWinch.set(0.0);
                armWinchLimitPosition = currentWinchPosition;
+               state++;
+               stateCounter = 0;
+            }
+         break;
+         case 2:  //go down just a little
+            desiredWinchTarget = determineWinchTarget(false, false, false, false, prevWinchTarget, currentWinchPosition, 1,armWinchLimitSwitch, armWinchLimitPosition);
+            armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
+            m_armWinch.set(armWinchPower);
+            stateCounter++;
+            if (stateCounter > 25) {
+               m_armWinch.set(0.0);
+               state++;
+               stateCounter = 0;
+            }
+         break;
+         case 3: 
+
+
+               stateCounter++;
+               if (stateCounter > 100) {
+                  state++;
+                  stateCounter = 0;
+               }
+
+         break;
+         case 4: //move arm pivot to the limit switch to calibrate
+            if (armPivotLimitSwitch) {
+               armPivotLimitPosition = currentArmPosition;
+               m_pincher.set(true); 
+               stateCounter++;
+               if (stateCounter > 10) {
+                  state++;
+                  stateCounter = 0;
+               }
             }
             desiredPivotTarget = determinePivotTarget(false, false, false, false, prevArmTarget, currentArmPosition, -0.523, armPivotLimitSwitch, armPivotLimitPosition);
             prevArmTarget = desiredPivotTarget; 
@@ -238,7 +289,7 @@ public class Robot extends TimedRobot {
             m_armPivot.set(armPivotPower);
             prevArmPivotError = armPivotError;
          break;
-         case 1:
+         case 5: //get arm to position
             desiredPivotTarget = determinePivotTarget(false, false, true, false, prevArmTarget, currentArmPosition, 0.0, armPivotLimitSwitch, armPivotLimitPosition);
             prevArmTarget = desiredPivotTarget; 
             armPivotError = desiredPivotTarget-currentArmPosition;
@@ -246,23 +297,47 @@ public class Robot extends TimedRobot {
             m_armPivot.set(armPivotPower);
             prevArmPivotError = armPivotError;
             if (Math.abs(armPivotError) < 1.0) {
+               stateCounter++;
+               if (stateCounter > 10) {
+                  state++;
+                  stateCounter = 0;
+               }
+            }
+         break;
+         case 6:
+            desiredWinchTarget = determineWinchTarget(false, false, false, true, prevWinchTarget, currentWinchPosition, 0,armWinchLimitSwitch, armWinchLimitPosition);
+            prevWinchTarget = desiredWinchTarget; 
+            armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
+            m_armWinch.set(armWinchPower);
+            if (Math.abs(desiredWinchTarget - currentWinchPosition) < 2)
+            {
+               m_armWinch.set(0);
                state++;
             }
          break;
-         case 2: 
-            if(driveForwardInches(15, 0.1)) {
+         case 7:
+            m_pincher.set(false);
+            stateCounter++;
+            if (stateCounter > 100) {
                state++;
+               stateCounter = 0;
+            }
+         break;
+         case 8: 
+            if(driveForwardInches(15, 0.25)) {
+               state++;
+               m_armPivot.set(0);
                
                //state++; //jump to state 2 
             }
          break;
-         case 3:
+         case 11:
             if(balancePitch(0.08)) {
                state++;
                pitchCounter = 0;
             }
          break;
-         case 4:
+         case 24:
          pitchCounter++;
             if(pitchCounter > 250) {
                //state++;
@@ -274,6 +349,23 @@ public class Robot extends TimedRobot {
             //state++; //jump to state 2 
          }
       break;
+      }
+      if (debug_timer > 9)
+      {
+         //myBooleanLog.append(armPivotLimitSwitch);
+         myDoubleLog.append(currentWinchPosition);
+         myDoubleLog.append(Double.valueOf(state));
+         //myDoubleLog.append(armWinchPower);
+         //myDoubleLog.append(armWinchLimitPosition);
+         //myDoubleLog.append(e_frontLeftDrive.getPosition());
+         //myDoubleLog.append(e_frontRightDrive.getPosition());
+         //myDoubleLog.append(e_backLeftDrive.getPosition());
+         //myDoubleLog.append(e_backRightDrive.getPosition());
+         //myDoubleLog.append(frontRightEncoder.getPosition());
+         //myDoubleLog.append(brcmd);
+         debug_timer = 0;
+      } else {
+         debug_timer = debug_timer +1;
       }
    }
 
@@ -315,8 +407,6 @@ public class Robot extends TimedRobot {
       double leftTrigger;
       double rightTrigger;
       
-      
-
       double kp_yaw;
       double ki_yaw;
       double kd_yaw;
@@ -367,16 +457,23 @@ public class Robot extends TimedRobot {
       prevGain = gain;
       gain = gain * orientation;
 
+      // if the driver joystick is not near zero, drive
       if ((Math.abs(joyXPos) > 0.09)||(Math.abs(joyYPos) > 0.09)){
          drCmd = (joyXPos*joyXPos)+(joyYPos*joyYPos);
          drCmd = gain * Math.sqrt(drCmd);
+         // this is a large function that determines the desired
+         //angle of the wheel
          desiredAngle = determineDesiredAngle(joyXPos,joyYPos);    
       }
   
+      // these are offsets
       backLeftSpinAngle = 0;
       backRightSpinAngle =0;
       frontLeftSpinAngle =0;
       frontRightSpinAngle =0;
+
+      // this robot tends to favor the right side motors
+      //slow them down a little
       backLeftDriveGain =1;
       backRightDriveGain = 0.8;
       frontLeftDriveGain= 1;
@@ -618,14 +715,14 @@ public class Robot extends TimedRobot {
       // telemtry information, feel free to change as needed
       if (debug_timer > 9)
       {
-         //myBooleanLog.append(armPivotLimitSwitch);
-         myDoubleLog.append(currentWinchPosition);
-         myDoubleLog.append(desiredWinchTarget);
-         myDoubleLog.append(armWinchPower);
-         myDoubleLog.append(armWinchLimitPosition);
-         //myDoubleLog.append(e_frontLeftDrive.getPosition());
-         //myDoubleLog.append(e_frontRightDrive.getPosition());
-         //myDoubleLog.append(e_backLeftDrive.getPosition());
+         myBooleanLog.append(armPivotLimitSwitch);
+         //myDoubleLog.append(currentWinchPosition);
+         //myDoubleLog.append(desiredWinchTarget);
+         //myDoubleLog.append(armWinchPower);
+         //myDoubleLog.append(armWinchLimitPosition);
+         myDoubleLog.append(currentArmPosition);
+         myDoubleLog.append(desiredPivotTarget);
+         myDoubleLog.append(armPivotPower);
          //myDoubleLog.append(e_backRightDrive.getPosition());
          //myDoubleLog.append(frontRightEncoder.getPosition());
          //myDoubleLog.append(brcmd);
@@ -653,32 +750,60 @@ public class Robot extends TimedRobot {
          distanceInit = distance;
          timeInit = true;
       }
-    
-      if ((distance - distanceInit) < (inches*0.56)) {
-         if (driveYaw > 0) {
-            rightPwr = 0.0009*(driveYaw);
-         } else {
-            leftPwr = -0.0009*(driveYaw);
-         }
 
-         flcmd = -power+leftPwr;
-         frcmd = -power+rightPwr;
-         blcmd = -power+leftPwr;
-         brcmd = -power+rightPwr;
+      if (inches > 0) {
+         if ((distance - distanceInit) < (inches*0.56)) {
+            if (driveYaw > 0) {
+               rightPwr = 0.0009*(driveYaw);
+            } else {
+               leftPwr = -0.0009*(driveYaw);
+            }
 
-         m_frontLeftDrive.set(flcmd);
-         m_frontRightDrive.set(frcmd);
-         m_backLeftDrive.set(blcmd);
-         m_backRightDrive.set(brcmd);
-         
-     } else {
-         m_frontLeftDrive.set(0.0);
-         m_frontRightDrive.set(0.0);
-         m_backLeftDrive.set(0.0);
-         m_backRightDrive.set(0.0);  
-         complete = true; 
-         timeInit = false; 
-     }
+            flcmd = -power+leftPwr;
+            frcmd = -power+rightPwr;
+            blcmd = -power+leftPwr;
+            brcmd = -power+rightPwr;
+
+            m_frontLeftDrive.set(flcmd);
+            m_frontRightDrive.set(frcmd);
+            m_backLeftDrive.set(blcmd);
+            m_backRightDrive.set(brcmd);
+        } else {
+           m_frontLeftDrive.set(0.0);
+           m_frontRightDrive.set(0.0);
+           m_backLeftDrive.set(0.0);
+           m_backRightDrive.set(0.0);  
+           complete = true; 
+           timeInit = false; 
+        }
+      } else { //drive backward
+         if ((distance - distanceInit) < (-inches*0.56)) {
+            if (driveYaw > 0) {
+               //rightPwr = 0.0009*(driveYaw);
+            } else {
+               //leftPwr = -0.0009*(driveYaw);
+            }
+
+            flcmd = power+leftPwr;
+            frcmd = power+rightPwr;
+            blcmd = power+leftPwr;
+            brcmd = power+rightPwr;
+
+            m_frontLeftDrive.set(flcmd);
+            m_frontRightDrive.set(frcmd);
+            m_backLeftDrive.set(blcmd);
+            m_backRightDrive.set(brcmd);
+        } else {
+           m_frontLeftDrive.set(0.0);
+           m_frontRightDrive.set(0.0);
+           m_backLeftDrive.set(0.0);
+           m_backRightDrive.set(0.0);  
+           complete = true; 
+           timeInit = false; 
+        }
+      }
+     
+
 	 
      m_frontLeftSteer.set(0.0);
      m_frontRightSteer.set(0.0);
@@ -832,7 +957,7 @@ public class Robot extends TimedRobot {
       }
 
       if (x) {
-         target = zeroPosition+26; 
+         target = zeroPosition+22; 
       }
       if (joyX > 0.2) {
          target = target + (joyX*gain);
@@ -850,22 +975,22 @@ public class Robot extends TimedRobot {
    public static double determineWinchTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition, double joyY, boolean limitSwitch, double zeroPosition)
    {
       double target; 
-      double gain = 4;
+      double gain = 3;
       target = prevTgt; 
       if (a) {
          target = zeroPosition; 
       }
 
       if (b) {
-         target = zeroPosition-40*4;
+         target = zeroPosition+40;
       }
 
       if (y) {
-         target = zeroPosition-45*4;
+         target = zeroPosition+45;
       }
 
       if (x) {
-         target = zeroPosition-90*4; 
+         target = zeroPosition+90; 
       }
       if (joyY > 0.2) {
          target = target + (joyY*gain);
@@ -885,11 +1010,14 @@ public class Robot extends TimedRobot {
    public static double determineWinchPower(double desiredPos, double currentPos, boolean limitSwitch) {
       double Kp_winch = 0.05;
       double winchPower;
+      double maxDesiredPosition = 140;
+
+      if (desiredPos > maxDesiredPosition) {desiredPos = maxDesiredPosition;}
 
       winchPower = Kp_winch * (desiredPos-currentPos);
 
-      if (limitSwitch && (winchPower > 0.1)) {
-         winchPower = -0.1;
+      if (limitSwitch && (winchPower < 0.0)) {
+         winchPower = 0.01;
       } else {
 
       }
