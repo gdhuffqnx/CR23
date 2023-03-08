@@ -47,7 +47,7 @@ public class Robot extends TimedRobot {
    CANCoder backLeftEncoder = new CANCoder(3);
 
    //private final Solenoid m_solenoid = new Solenoid(PneumaticsModuleType.REVPH, 0);
-   private final Compressor m_compressor = new Compressor(12, PneumaticsModuleType.REVPH);
+  // private final Compressor m_compressor = new Compressor(12, PneumaticsModuleType.REVPH);
 
    private boolean timeInit;
    private int counter;
@@ -144,7 +144,7 @@ public class Robot extends TimedRobot {
    public void robotInit() {
       
       TIME_STEP = 0.02;  // 50 hertz
-      m_compressor.enableDigital();
+    //  m_compressor.enableDigital();
       //m_solenoid.set(true);
       
       m_frontLeftDrive.setInverted(false);
@@ -236,6 +236,7 @@ public class Robot extends TimedRobot {
             armWinchLimitPosition = 0.0;
             stateCounter = 0;
             debug_timer = 0;
+            //state = 33; //debug only
             state++;
          break;
          case 1: //crank in winch to calibrate position
@@ -324,7 +325,7 @@ public class Robot extends TimedRobot {
             }
          break;
          case 8: 
-            if(driveForwardInches(15, 0.25)) {
+            if(driveForwardInches(140, 0.35)) {
                state++;
                m_armPivot.set(0);
                
@@ -344,8 +345,9 @@ public class Robot extends TimedRobot {
             }
          break; 
          case 33: 
-         if(driveForwardInches(48, -0.25)) {
+         if(driveForwardInches(60, 0.35)) {
             state++;
+            prevDrCmd = 0;
             //state++; //jump to state 2 
          }
       break;
@@ -391,6 +393,7 @@ public class Robot extends TimedRobot {
       boolean yawCompensationEnable = false;
       boolean buttonA;
       boolean buttonB;
+      boolean buttonX;
       boolean buttonY; 
       double turnGain;
       double desiredYaw;
@@ -422,6 +425,7 @@ public class Robot extends TimedRobot {
       togglePad = m_driverController.getLeftX();
       buttonA = m_driverController.getAButton();
       buttonB = m_driverController.getBButton();
+      buttonX = m_driverController.getXButton();
       buttonY = m_driverController.getYButton();
       leftTrigger = m_driverController.getLeftTriggerAxis();
       rightTrigger = m_driverController.getRightTriggerAxis();
@@ -506,8 +510,108 @@ public class Robot extends TimedRobot {
 
          drCmd = -0.5 * orientation * Math.abs(gain);
       }
+      if (buttonA ) {
+         desiredAngle = 0;
+         backLeftSpinAngle = 1;
+         backRightSpinAngle = 1;
+         frontLeftSpinAngle =1;
+         frontRightSpinAngle =1;
+         backLeftDriveGain =-1;
+         backRightDriveGain =-1;
+         frontLeftDriveGain= -1;
+         frontRightDriveGain =-1;
+         if (leftBumper){
+            if (prevDrCmd<.8){
+               drCmd = prevDrCmd +.01;
+            } else {
+               drCmd=.8;
+            }
+         } else {
+            if (prevDrCmd>.1){
+               drCmd = prevDrCmd -.01;
+            } else {
+               drCmd=.1;
+            }
+         drCmd = .1;
+         }
+      }
+      if (buttonB) {
+         desiredAngle = 0;
+         backLeftSpinAngle = 90;
+         backRightSpinAngle = 90;
+         frontLeftSpinAngle =90;
+         frontRightSpinAngle =90;
+         backLeftDriveGain =-1;
+         backRightDriveGain =-1;
+         frontLeftDriveGain= -1;
+         frontRightDriveGain = -1;
 
-      if (buttonA && (drCmd < 0.03)) {
+         if (leftBumper){
+            if (prevDrCmd<.8){
+               drCmd = prevDrCmd +.01;
+            } else {
+               drCmd=.8;
+            }
+         } else {
+            if (prevDrCmd>.1){
+               drCmd = prevDrCmd -.01;
+            } else {
+               drCmd=.1;
+            }
+         drCmd = .1;
+         }
+     }
+     if (buttonX) {
+        desiredAngle = 0;
+        backLeftSpinAngle = 90;
+        backRightSpinAngle = 90;
+        frontLeftSpinAngle =90;
+        frontRightSpinAngle =90;
+        backLeftDriveGain =1;
+        backRightDriveGain =1;
+        frontLeftDriveGain= 1;
+        frontRightDriveGain = 1;
+        if (leftBumper) {
+           if (prevDrCmd < 0.8){
+              drCmd = prevDrCmd +.01;
+           } else {
+              drCmd=.8;
+           }
+        } else {
+           if (prevDrCmd > 0.1) {
+              drCmd = prevDrCmd -.01;
+           } else {
+             drCmd=.1;
+           }
+           drCmd = .1;
+        }
+     }
+     if (buttonY) {
+        desiredAngle = 0;
+        backLeftSpinAngle = 1;
+        backRightSpinAngle = 1;
+        frontLeftSpinAngle =1;
+        frontRightSpinAngle =1;
+        backLeftDriveGain =1;
+        backRightDriveGain =1;
+        frontLeftDriveGain= 1;
+        frontRightDriveGain = 1;
+        if (leftBumper){
+           if (prevDrCmd<.8){
+              drCmd = prevDrCmd +.01;
+           } else {
+              drCmd=.8;
+           }
+        } else {
+           if (prevDrCmd>.1){
+              drCmd = prevDrCmd -.01;
+           } else {
+              drCmd=.1;
+           }
+           drCmd = .1;
+        }
+     }
+      if (m_driverController.getPOV()>45&&m_driverController.getPOV()<135){
          desiredAngle = 0;
          backLeftSpinAngle = -45;
          backRightSpinAngle = 45;
@@ -545,8 +649,8 @@ public class Robot extends TimedRobot {
          yawFlipError = desiredYaw-other_yaw;
          yawFlipErrorSum = yawFlipErrorSum + (yawFlipError * TIME_STEP);
          drCmd = (kp_yaw*yawFlipError)+(ki_yaw*yawFlipErrorSum)+(kd_yaw*(yawFlipError-prevYawFlipError));
-         if (drCmd > 0.4) {drCmd = 0.4;}
-         if (drCmd < -0.4) {drCmd = -0.4;}
+         if (drCmd > 0.3) {drCmd = 0.3;}
+         if (drCmd < -0.3) {drCmd = -0.3;}
          prevYawFlipError = yawFlipError;
        }
        else if (leftTrigger > 0.5) {
@@ -564,8 +668,8 @@ public class Robot extends TimedRobot {
          yawFlipErrorSum = yawFlipErrorSum + (yawFlipError * TIME_STEP);
 
          drCmd = (kp_yaw*yawFlipError)+(ki_yaw*yawFlipErrorSum)+(kd_yaw*(yawFlipError-prevYawFlipError));
-         if (drCmd > 0.4) {drCmd = 0.4;}
-         if (drCmd < -0.4) {drCmd = -0.4;}
+         if (drCmd > 0.3) {drCmd = 0.3;}
+         if (drCmd < -0.3) {drCmd = -0.3;}
          prevYawFlipError = yawFlipError;
       } else {
          yawFlipErrorSum = 0.0;
@@ -574,7 +678,7 @@ public class Robot extends TimedRobot {
 
       d_yaw = Double.valueOf(yaw);
       //ZERO YAW
-      if (buttonB && (drCmd < 0.03)) {
+      /*if (buttonB && (drCmd < 0.03)) {
          desiredAngle = 0;
          backLeftSpinAngle   =  45;
          backRightSpinAngle  = -45;
@@ -588,7 +692,7 @@ public class Robot extends TimedRobot {
          drCmd = (desiredYaw-d_yaw)*kp_yaw * orientation;
          if (drCmd > 0.4) {drCmd = 0.4;}
          if (drCmd < -0.4) {drCmd = -0.4;}
-      }
+      }*/
 
       // yaw compensation logic, if driving straight, try to zero yaw
       // can be disabled if yawCompensationEnable is set to false
@@ -637,7 +741,7 @@ public class Robot extends TimedRobot {
       }
 
       // simple filter to smooth out angle change, this may have a minor bug
-      filteredAngle = prevDesiredAngle + (0.01*(desiredAngle - prevDesiredAngle));
+      filteredAngle = desiredAngle;//prevDesiredAngle + (0.01*(desiredAngle - prevDesiredAngle));
 
       //
       // wheel spin
@@ -735,85 +839,88 @@ public class Robot extends TimedRobot {
 // Drive Forward Inches
 // used in autonomous mode
 //
-   public boolean driveForwardInches(double inches, double power){
+   public boolean driveForwardInches(double inches, double powerInput){
       boolean complete = false; 
       double driveYaw;
       double leftPwr;
       double rightPwr;
+      double power = 0;
+      
       rightPwr = 0.0;
       leftPwr = 0.0;
       driveYaw = Double.valueOf(yaw);
-
 
       distance = -e_frontLeftDrive.getPosition();
       if (timeInit == false)  {
          distanceInit = distance;
          timeInit = true;
       }
-
-      if (inches > 0) {
-         if ((distance - distanceInit) < (inches*0.56)) {
-            if (driveYaw > 0) {
-               rightPwr = 0.0009*(driveYaw);
-            } else {
-               leftPwr = -0.0009*(driveYaw);
-            }
-
-            flcmd = -power+leftPwr;
-            frcmd = -power+rightPwr;
-            blcmd = -power+leftPwr;
-            brcmd = -power+rightPwr;
-
-            m_frontLeftDrive.set(flcmd);
-            m_frontRightDrive.set(frcmd);
-            m_backLeftDrive.set(blcmd);
-            m_backRightDrive.set(brcmd);
-        } else {
-           m_frontLeftDrive.set(0.0);
-           m_frontRightDrive.set(0.0);
-           m_backLeftDrive.set(0.0);
-           m_backRightDrive.set(0.0);  
-           complete = true; 
-           timeInit = false; 
-        }
-      } else { //drive backward
-         if ((distance - distanceInit) < (-inches*0.56)) {
-            if (driveYaw > 0) {
-               //rightPwr = 0.0009*(driveYaw);
-            } else {
-               //leftPwr = -0.0009*(driveYaw);
-            }
-
-            flcmd = power+leftPwr;
-            frcmd = power+rightPwr;
-            blcmd = power+leftPwr;
-            brcmd = power+rightPwr;
-
-            m_frontLeftDrive.set(flcmd);
-            m_frontRightDrive.set(frcmd);
-            m_backLeftDrive.set(blcmd);
-            m_backRightDrive.set(brcmd);
-        } else {
-           m_frontLeftDrive.set(0.0);
-           m_frontRightDrive.set(0.0);
-           m_backLeftDrive.set(0.0);
-           m_backRightDrive.set(0.0);  
-           complete = true; 
-           timeInit = false; 
-        }
-      }
+      //
+      // wheel spin
+      // error = desired - current
+      //
+      // target is 0
+      frontRightSpinError = 0 - frontRightEncoder.getPosition();
+      backRightSpinError  = 0 - backRightEncoder.getPosition();
+      frontLeftSpinError  = 0 - frontLeftEncoder.getPosition();
+      backLeftSpinError   = 0 - backLeftEncoder.getPosition();
      
+      //
+      // needed for I term which isn't essential for wheel spin control
+      //
+      frontRightSpinErrorSum = 0.0;//frontRightSpinErrorSum+frontRightSpinError*TIME_STEP;
+      backRightSpinErrorSum = 0.0;//backRightSpinErrorSum+backRightSpinError*TIME_STEP;
+      frontLeftSpinErrorSum = 0.0;//frontLeftSpinErrorSum+frontLeftSpinError*TIME_STEP;
+      backLeftSpinErrorSum = 0.0;//backLeftSpinErrorSum+backLeftSpinError*TIME_STEP;
 
-	 
-     m_frontLeftSteer.set(0.0);
-     m_frontRightSteer.set(0.0);
-     m_backLeftSteer.set(0.0);
-     m_backRightSteer.set(0.0);
-	  
+      // calculate the required motor power command to get to desired wheel angle
+      flcmd = -wheelAngle(frontLeftSpinError,  frontLeftSpinErrorSum);
+      frcmd =  wheelAngle(frontRightSpinError, frontRightSpinErrorSum);       
+      blcmd = -wheelAngle(backLeftSpinError,   backLeftSpinErrorSum);
+      brcmd = -wheelAngle(backRightSpinError,  backRightSpinErrorSum);
+      m_frontLeftSteer.set(flcmd);
+      m_frontRightSteer.set(frcmd);
+      m_backLeftSteer.set(blcmd);
+      m_backRightSteer.set(brcmd);
+
+
+      if ((distance - distanceInit) < (inches*0.56)) {
+         power = prevDrCmd + (0.1*(powerInput-prevDrCmd));
+         if (driveYaw > 2) {
+            rightPwr = 0.025*(driveYaw);
+         } else if (driveYaw<-2){
+            leftPwr = -0.025*(driveYaw);
+         }
+         // this robot tends to favor the right side motors
+         //slow them down a little
+         backLeftDriveGain =1;
+         backRightDriveGain = 1;
+         frontLeftDriveGain= 1;
+         frontRightDriveGain = 1;
+
+         flcmd = -frontLeftDriveGain*power+leftPwr;
+         frcmd = -frontRightDriveGain*power+rightPwr;
+         blcmd = -backLeftDriveGain*power+leftPwr;
+         brcmd = -backRightDriveGain*power+rightPwr;
+         prevDrCmd = power;
+
+         m_frontLeftDrive.set(flcmd);
+         m_frontRightDrive.set(frcmd);
+         m_backLeftDrive.set(blcmd);
+         m_backRightDrive.set(brcmd);
+      } else {
+         complete = true; 
+         timeInit = false; 
+         m_frontLeftDrive.set(0.0);
+         m_frontRightDrive.set(0.0);
+         m_backLeftDrive.set(0.0);
+         m_backRightDrive.set(0.0);
+      }
      // telemtry
      if (counter > 9)
      {
         myDoubleLog.append(rightPwr);
+        myDoubleLog.append(leftPwr);
         myDoubleLog.append(driveYaw);
         counter = 0;
      } else {
