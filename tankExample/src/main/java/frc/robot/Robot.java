@@ -337,8 +337,8 @@ public class Robot extends TimedRobot {
             }
          break;
          case 9: 
-            if(driveForwardInches(40, 0.35)) {
-               state++;
+            if(driveForwardInches(140, 0.35)) {
+               //state++;
                m_armPivot.set(0);
                
                //state++; //jump to state 2 
@@ -357,7 +357,7 @@ public class Robot extends TimedRobot {
             }
          break; 
          case 33: 
-         if(driveForwardInches(60, 0.35)) {
+         if(driveForwardInches(120, 0.35)) {
             state++;
             prevDrCmd = 0;
             //state++; //jump to state 2 
