@@ -1179,7 +1179,7 @@ public class Robot extends TimedRobot {
    
    public static double determineDesiredAngle(double joyX, double joyY) {   
       if ((joyX > 0.1)&&(joyY < -0.1)) {
-         return(-57.3*Math.atan(Math.abs(joyY/joyX)));
+         return(-57.3*Math.atan(Math.abs(joyX/joyY)));
       }
       if ((joyX > 0.1)&&(Math.abs(joyY) < 0.1)) {
          return(-90);
@@ -1194,13 +1194,13 @@ public class Robot extends TimedRobot {
          return(180);
       }
       if ((joyX > 0.1)&&(joyY > 0.1)) {
-         return(-180+57.3*Math.atan(Math.abs(joyY/joyX)));
+         return(-180+57.3*Math.atan(Math.abs(joyX/joyY)));
       }
       if ((joyX < -0.1)&&(joyY < -0.1)) {
-         return(57.3*Math.atan(Math.abs(joyY/joyX)));
+         return(57.3*Math.atan(Math.abs(joyX/joyY)));
       }
       if ((joyX < -0.1)&&(joyY > 0.1)) {
-         return(180-57.3*Math.atan(Math.abs(joyY/joyX)));
+         return(180-57.3*Math.atan(Math.abs(joyX/joyY)));
       }
       return(0.1);
    }
