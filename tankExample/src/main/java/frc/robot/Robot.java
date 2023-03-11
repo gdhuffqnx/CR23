@@ -220,6 +220,8 @@ public class Robot extends TimedRobot {
    @Override
    public void autonomousPeriodic() {
       
+      boolean PINCHER_OPEN = true;
+      boolean PINCHER_CLOSED = !PINCHER_OPEN;
 
       yaw = gyro.getYaw();
       currentArmPosition = e_armPivot.getPosition();
@@ -233,7 +235,7 @@ public class Robot extends TimedRobot {
          case 0: // initalize
             prevArmTarget = currentArmPosition;
             prevWinchTarget = currentWinchPosition;
-            m_pincher.set(true); //true is open
+            m_pincher.set(PINCHER_OPEN); //true is open
             armWinchLimitPosition = 0.0;
             stateCounter = 0;
             debug_timer = 0;
@@ -295,7 +297,7 @@ public class Robot extends TimedRobot {
             prevArmPivotError = armPivotError;
          break;
          case 5:
-            m_pincher.set(false); //close
+            m_pincher.set(PINCHER_CLOSED); //close
             stateCounter++;
               if (stateCounter > 10) {
                state++;
@@ -329,7 +331,7 @@ public class Robot extends TimedRobot {
             stateCounter++;
          break;
          case 8:
-            m_pincher.set(true);
+            m_pincher.set(PINCHER_OPEN);
             stateCounter++;
             if (stateCounter > 100) {
                state++;
@@ -337,18 +339,26 @@ public class Robot extends TimedRobot {
             }
          break;
          case 9: 
-            if(driveForwardInches(140, 0.35)) {
-               //state++;
+         desiredWinchTarget = determineWinchTarget(true, false, false, false, prevWinchTarget, currentWinchPosition, 0,armWinchLimitSwitch, armWinchLimitPosition);
+         prevWinchTarget = desiredWinchTarget; 
+         armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
+         m_armWinch.set(armWinchPower);
+         if ((Math.abs(desiredWinchTarget - currentWinchPosition) < 2)||(stateCounter > 200))
+         {
+            m_armWinch.set(0);
+            state++;
+            stateCounter = 0;
+         }
+            if(driveForwardInches(140, 0.25)) {
+               state++;
                m_armPivot.set(0);
-               
-               //state++; //jump to state 2 
             }
          break;
-         case 11:
-            if(balancePitch(0.08)) {
-               state++;
-               pitchCounter = 0;
-            }
+         case 10:
+        //    if(balancePitch(0.08)) {
+        //       state++;
+        //       pitchCounter = 0;
+        //    }
          break;
          case 24:
          pitchCounter++;
@@ -1114,11 +1124,11 @@ public class Robot extends TimedRobot {
       }
 
       if (y) {
-         target = zeroPosition+45;
+         target = zeroPosition+130; //target for medium was 45
       }
 
       if (x) {
-         target = zeroPosition+90; 
+         target = zeroPosition+45; 
       }
       if (joyY > 0.2) {
          target = target + (joyY*gain);
