@@ -104,6 +104,9 @@ public class Robot extends TimedRobot {
    private double  armWinchLimitPosition;
    private boolean armWinchLimitSwitch;
 
+   private boolean PINCHER_OPEN;
+   private boolean PINCHER_CLOSED;
+
    private double currentArmPosition;
    private double desiredPivotTarget; 
    private double desiredWinchTarget; 
@@ -148,21 +151,26 @@ public class Robot extends TimedRobot {
 
    @Override
    public void robotInit() {
+      
+      PINCHER_OPEN = true;
+      PINCHER_CLOSED = !PINCHER_OPEN;
 
+      // yaw PID values used in autonomous and teleop
       kp_yaw = 0.009;
       ki_yaw = 0.0001;
       kd_yaw = 0.0001;
       
+      // important constant
       TIME_STEP = 0.02;  // 50 hertz
+
+      //Enabling the compressor
       m_compressor.enableDigital();
-      //m_solenoid.set(true);
       
       m_frontLeftDrive.setInverted(true);
       m_frontRightDrive.setInverted(true);
       m_backLeftDrive.setInverted(true);  
       m_backRightDrive.setInverted(true);  
-      //e_armPivot.setPosition(newPosition: 0);
-      //e_armWinch.setPosition(0);
+
       frontLeftEncoder.setPosition(0);
       frontRightEncoder.setPosition(0);
       backLeftEncoder.setPosition(0);
@@ -170,8 +178,9 @@ public class Robot extends TimedRobot {
       m_armPivot.setInverted(false); 
       m_armWinch.setInverted(false);   
       
-      m_pincher.set(true); //true is open
+      m_pincher.set(PINCHER_OPEN);
 
+      // initializing global variables to zero
       frontRightSpinErrorSum = 0;
       backRightSpinErrorSum = 0;
       frontLeftSpinErrorSum = 0;
@@ -198,14 +207,15 @@ public class Robot extends TimedRobot {
       prevDesiredAngle = 0;
       prevGain = 0;
       stateCounter = 0;
-
       prevDrCmd = 0;
       prevArmTarget = 0; 
       prevArmPivotError = 0; 
+      debug_timer = 0;
+
+      // Initialize the gyro in robot init
       gyro.calibrate();
 
-      debug_timer = 0;
-	  
+      // assign motor encoders
 	   e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
       e_frontRightDrive = m_frontRightDrive.getEncoder();
       e_backLeftDrive   = m_backLeftDrive.getEncoder();
@@ -230,8 +240,7 @@ public class Robot extends TimedRobot {
    @Override
    public void autonomousPeriodic() {
       
-      boolean PINCHER_OPEN = true;
-      boolean PINCHER_CLOSED = !PINCHER_OPEN;
+
 
       yaw = gyro.getYaw();
       currentArmPosition = e_armPivot.getPosition();
@@ -245,12 +254,11 @@ public class Robot extends TimedRobot {
          case 0: // initalize
             prevArmTarget = currentArmPosition;
             prevWinchTarget = currentWinchPosition;
-            m_pincher.set(PINCHER_OPEN); //true is open
+            m_pincher.set(PINCHER_OPEN); 
             armWinchLimitPosition = 0.0;
             stateCounter = 0;
             debug_timer = 0;
             pitchCounter = 0;
-            //state = 33; //debug only
             state++;
          break;
          case 1: //crank in winch to calibrate position
@@ -319,7 +327,7 @@ public class Robot extends TimedRobot {
             m_pincher.set(PINCHER_OPEN);
             stateCounter++;
             if (stateCounter > 100) {
-               state = ++;
+               state++;
                stateCounter = 0;
             }
          break;
@@ -405,11 +413,8 @@ public class Robot extends TimedRobot {
       boolean buttonB;
       boolean buttonX;
       boolean buttonY; 
-      double turnGain;
       double desiredYaw;
       double currentAngle;
-      int debug;
-      debug = 0;
 
       boolean button2A; 
       boolean button2B;
@@ -449,7 +454,6 @@ public class Robot extends TimedRobot {
       right2Bumper = m_armController.getRightBumperPressed();
 
       desiredYaw = 0;
-      turnGain = 0.0;
       blcmd = 0.0;
       flcmd = 0.0;
       frcmd = 0.0;
@@ -742,10 +746,7 @@ public class Robot extends TimedRobot {
          backRightDriveGain  = -backRightDriveGain;
          frontLeftDriveGain  = -frontLeftDriveGain;
          frontRightDriveGain = -frontRightDriveGain;
-         debug = 2;
-      } else  {
-         debug = 1;
-      }
+      } 
 
       // simple filter to smooth out angle change, this may have a minor bug
       filteredAngle = desiredAngle;//prevDesiredAngle + (0.01*(desiredAngle - prevDesiredAngle));
@@ -853,7 +854,7 @@ public class Robot extends TimedRobot {
 // Drive Forward Inches
 // used in autonomous mode
 //
-   public boolean driveForwardInches(double inches, double powerInput){
+   public boolean driveForwardInches(double inches, double powerInput) {
       boolean complete = false; 
       double driveYaw;
       double leftPwr;
@@ -882,10 +883,10 @@ public class Robot extends TimedRobot {
       //
       // needed for I term which isn't essential for wheel spin control
       //
-      frontRightSpinErrorSum = 0.0;//frontRightSpinErrorSum+frontRightSpinError*TIME_STEP;
-      backRightSpinErrorSum = 0.0;//backRightSpinErrorSum+backRightSpinError*TIME_STEP;
-      frontLeftSpinErrorSum = 0.0;//frontLeftSpinErrorSum+frontLeftSpinError*TIME_STEP;
-      backLeftSpinErrorSum = 0.0;//backLeftSpinErrorSum+backLeftSpinError*TIME_STEP;
+      frontRightSpinErrorSum = 0.0; //frontRightSpinErrorSum+frontRightSpinError*TIME_STEP;
+      backRightSpinErrorSum = 0.0;  //backRightSpinErrorSum+backRightSpinError*TIME_STEP;
+      frontLeftSpinErrorSum = 0.0;  //frontLeftSpinErrorSum+frontLeftSpinError*TIME_STEP;
+      backLeftSpinErrorSum = 0.0;   //backLeftSpinErrorSum+backLeftSpinError*TIME_STEP;
 
       // calculate the required motor power command to get to desired wheel angle
       flcmd = -wheelAngle(frontLeftSpinError,  frontLeftSpinErrorSum);
@@ -898,7 +899,6 @@ public class Robot extends TimedRobot {
       m_backLeftSteer.set(blcmd);
       m_backRightSteer.set(brcmd);
 
-
       if ((distance - distanceInit) < (inches*0.56)) {
          power = prevDrCmd + (0.1*(powerInput-prevDrCmd));
          if (driveYaw > 2) {
@@ -908,9 +908,9 @@ public class Robot extends TimedRobot {
          }
          // this robot tends to favor the right side motors
          //slow them down a little
-         backLeftDriveGain =1;
-         backRightDriveGain = 1;
-         frontLeftDriveGain= 1;
+         backLeftDriveGain   = 1;
+         backRightDriveGain  = 1;
+         frontLeftDriveGain  = 1;
          frontRightDriveGain = 1;
 
          flcmd = -frontLeftDriveGain*power+leftPwr;
@@ -1173,7 +1173,7 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
          }
          //if (target < 0) {target = 0;}
       }
-      if (target > zeroPosition+25) {target = zeroPosition+25;}
+      if (target > zeroPosition+30) {target = zeroPosition+30;}
       //if (target < -5) {target = -5;}
       
       return (prevTgt+ (0.25*(target - prevTgt)));
