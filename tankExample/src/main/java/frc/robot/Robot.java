@@ -55,6 +55,7 @@ public class Robot extends TimedRobot {
    private double TIME_STEP;
    private double distance;
    private double distanceInit;
+   private double yawInit;
    private double flcmd = 0;
    private double frcmd = 0;
    private double blcmd = 0;
@@ -106,6 +107,10 @@ public class Robot extends TimedRobot {
    private double currentArmPosition;
    private double desiredPivotTarget; 
    private double desiredWinchTarget; 
+
+   private double kp_yaw;
+   private double ki_yaw;
+   private double kd_yaw;
    
    private boolean openOrClose;
    private int state; 
@@ -143,6 +148,10 @@ public class Robot extends TimedRobot {
 
    @Override
    public void robotInit() {
+
+      kp_yaw = 0.009;
+      ki_yaw = 0.0001;
+      kd_yaw = 0.0001;
       
       TIME_STEP = 0.02;  // 50 hertz
       m_compressor.enableDigital();
@@ -173,6 +182,7 @@ public class Robot extends TimedRobot {
       frontLeftSpinError = 0;
       backLeftSpinError = 0;
 
+      yawInit = 0.0;
       yawFlipError = 0.0;
       yawFlipErrorSum = 0.0;
       prevYawFlipError = 0.0;
@@ -239,6 +249,7 @@ public class Robot extends TimedRobot {
             armWinchLimitPosition = 0.0;
             stateCounter = 0;
             debug_timer = 0;
+            pitchCounter = 0;
             //state = 33; //debug only
             state++;
          break;
@@ -255,40 +266,14 @@ public class Robot extends TimedRobot {
                stateCounter = 0;
             }
          break;
-         case 2:  //go down just a little
-            desiredWinchTarget = determineWinchTarget(false, false, false, false, prevWinchTarget, currentWinchPosition, 1,armWinchLimitSwitch, armWinchLimitPosition);
-            armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
-            m_armWinch.set(armWinchPower);
-            stateCounter++;
-            if (stateCounter > 25) {
-               m_armWinch.set(0.0);
-               //m_pincher.set(false);
-               state++;
-               stateCounter = 0;
-            }
-         break;
-          case 3: 
-            desiredWinchTarget = determineWinchTarget(false, false, false, false, prevWinchTarget, currentWinchPosition, -1,armWinchLimitSwitch, armWinchLimitPosition);
-            prevWinchTarget = desiredWinchTarget; 
-            armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
-            m_armWinch.set(armWinchPower);
-            stateCounter++;
-            if (armWinchLimitSwitch || stateCounter > 50) {
-               m_armWinch.set(0.0);
-               armWinchLimitPosition = currentWinchPosition;
-               state++;
-               stateCounter = 0;
-            }
-
-         break;
-         case 4: //move arm pivot to the limit switch to calibrate
+         case 2: //move arm pivot to the limit switch to calibrate
             if (armPivotLimitSwitch|| stateCounter > 200) {
                armPivotLimitPosition = currentArmPosition;
                state++;
                stateCounter = 0;
             }
             stateCounter++;
-            desiredPivotTarget = determinePivotTarget(false, false, false, false, prevArmTarget, currentArmPosition, -0.523, armPivotLimitSwitch, armPivotLimitPosition);
+            desiredPivotTarget = determinePivotTarget(false, false, false, false, prevArmTarget, currentArmPosition, -0.8, armPivotLimitSwitch, armPivotLimitPosition);
             prevArmTarget = desiredPivotTarget; 
             armPivotError = desiredPivotTarget-currentArmPosition;
             armPivotPower = determinePivotPower(armPivotError,prevArmPivotError);
@@ -296,7 +281,7 @@ public class Robot extends TimedRobot {
             //m_armPivot.getOutputCurrent();
             prevArmPivotError = armPivotError;
          break;
-         case 5:
+         case 3:
             m_pincher.set(PINCHER_CLOSED); //close
             stateCounter++;
               if (stateCounter > 10) {
@@ -304,20 +289,20 @@ public class Robot extends TimedRobot {
                stateCounter = 0;
             }
          break;
-         case 6: //get arm to position
+         case 4: //get arm to position
             desiredPivotTarget = determinePivotTarget(false, false, true, false, prevArmTarget, currentArmPosition, 0.0, armPivotLimitSwitch, armPivotLimitPosition);
             prevArmTarget = desiredPivotTarget; 
             armPivotError = desiredPivotTarget-currentArmPosition;
             armPivotPower = determinePivotPower(armPivotError,prevArmPivotError);
             m_armPivot.set(armPivotPower);
             prevArmPivotError = armPivotError;
-            if ((Math.abs(armPivotError) < 2.0)||(stateCounter > 200)) {
+            if ((Math.abs(armPivotError) < 2.0)&&(stateCounter >  100)) {
                state++;
                stateCounter = 0;
-            }
+           }
             stateCounter++;
          break;
-         case 7:
+         case 5:
             desiredWinchTarget = determineWinchTarget(false, false, false, true, prevWinchTarget, currentWinchPosition, 0,armWinchLimitSwitch, armWinchLimitPosition);
             prevWinchTarget = desiredWinchTarget; 
             armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
@@ -330,49 +315,52 @@ public class Robot extends TimedRobot {
             }
             stateCounter++;
          break;
-         case 8:
+         case 6:
             m_pincher.set(PINCHER_OPEN);
             stateCounter++;
             if (stateCounter > 100) {
-               state++;
+               state = ++;
                stateCounter = 0;
             }
          break;
-         case 9: 
-         desiredWinchTarget = determineWinchTarget(true, false, false, false, prevWinchTarget, currentWinchPosition, 0,armWinchLimitSwitch, armWinchLimitPosition);
-         prevWinchTarget = desiredWinchTarget; 
-         armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
-         m_armWinch.set(armWinchPower);
-         if ((Math.abs(desiredWinchTarget - currentWinchPosition) < 2)||(stateCounter > 200))
-         {
-            m_armWinch.set(0);
-            state++;
-            stateCounter = 0;
-         }
-            if(driveForwardInches(140, 0.25)) {
+         case 7: 
+            desiredWinchTarget = determineWinchTarget(true, false, false, false, prevWinchTarget, currentWinchPosition, 0,armWinchLimitSwitch, armWinchLimitPosition);
+            prevWinchTarget = desiredWinchTarget; 
+            armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
+            m_armWinch.set(armWinchPower);
+            if ((Math.abs(desiredWinchTarget - currentWinchPosition) < 2))
+            {
+               m_armWinch.set(0);
+            }
+            if (driveForwardInches(40, 0.25)) { //140 is competition value
                state++;
                m_armPivot.set(0);
             }
-         break;
-         case 10:
-        //    if(balancePitch(0.08)) {
-        //       state++;
-        //       pitchCounter = 0;
-        //    }
-         break;
-         case 24:
-         pitchCounter++;
-            if(pitchCounter > 250) {
-               //state++;
+            if (pitch > 5.0) {
+               pitchCounter++;
+               if (pitchCounter > 10) {
+                 // state = 20; // go balance
+                  pitchCounter = 0;
+               }
             }
-         break; 
-         case 33: 
-         if(driveForwardInches(120, 0.35)) {
-            state++;
-            prevDrCmd = 0;
-            //state++; //jump to state 2 
-         }
-      break;
+         break;
+         case 8:
+           // if (turnDegrees(180,0.25)) {
+            //   state++;
+           // }
+         break;
+         case 9:
+            // Done
+         break;
+         case 20: 
+            //we're trying to balance on the platform
+            if(balancePitch(0.05)) {
+               state++;
+            }
+         break;
+         case 21:
+            //Done 
+         break;
       }
       if (debug_timer > 9)
       {
@@ -432,9 +420,7 @@ public class Robot extends TimedRobot {
       double leftTrigger;
       double rightTrigger;
       
-      double kp_yaw;
-      double ki_yaw;
-      double kd_yaw;
+      
 
       armPivotLimitSwitch = m_armPivotLimitSwitch.get();
       armWinchLimitSwitch = m_armWinchLimitSwitch.get();
@@ -532,6 +518,10 @@ public class Robot extends TimedRobot {
 
          drCmd = -0.5 * orientation * Math.abs(gain);
       }
+      
+      // if using the buttons to drive straight, use the following logic
+      double MAX_BUTTON_SPEED = 0.80;
+      double MIN_BUTTON_SPEED = 0.15;
       if (buttonA ) {
          desiredAngle = 0;
          backLeftSpinAngle = 1;
@@ -543,18 +533,17 @@ public class Robot extends TimedRobot {
          frontLeftDriveGain= -1;
          frontRightDriveGain =-1;
          if (leftBumper){
-            if (prevDrCmd<.8){
+            if (prevDrCmd < MAX_BUTTON_SPEED){
                drCmd = prevDrCmd +.01;
             } else {
-               drCmd=.8;
+               drCmd = MAX_BUTTON_SPEED;
             }
          } else {
-            if (prevDrCmd>.1){
+            if (prevDrCmd > MIN_BUTTON_SPEED){
                drCmd = prevDrCmd -.01;
             } else {
-               drCmd=.1;
+               drCmd = MIN_BUTTON_SPEED;
             }
-         drCmd = .1;
          }
       }
       if (buttonB) {
@@ -569,70 +558,68 @@ public class Robot extends TimedRobot {
          frontRightDriveGain = -1;
 
          if (leftBumper){
-            if (prevDrCmd<.8){
+            if (prevDrCmd < MAX_BUTTON_SPEED){
                drCmd = prevDrCmd +.01;
             } else {
-               drCmd=.8;
+               drCmd = MAX_BUTTON_SPEED;
             }
          } else {
             if (prevDrCmd>.1){
                drCmd = prevDrCmd -.01;
             } else {
-               drCmd=.1;
+               drCmd = MIN_BUTTON_SPEED;
             }
-         drCmd = .1;
          }
-     }
-     if (buttonX) {
-        desiredAngle = 0;
-        backLeftSpinAngle = 90;
-        backRightSpinAngle = 90;
-        frontLeftSpinAngle =90;
-        frontRightSpinAngle =90;
-        backLeftDriveGain =1;
-        backRightDriveGain =1;
-        frontLeftDriveGain= 1;
-        frontRightDriveGain = 1;
-        if (leftBumper) {
-           if (prevDrCmd < 0.8){
-              drCmd = prevDrCmd +.01;
-           } else {
-              drCmd=.8;
-           }
-        } else {
-           if (prevDrCmd > 0.1) {
-              drCmd = prevDrCmd -.01;
-           } else {
-             drCmd=.1;
-           }
-           drCmd = .1;
-        }
-     }
-     if (buttonY) {
-        desiredAngle = 0;
-        backLeftSpinAngle = 1;
-        backRightSpinAngle = 1;
-        frontLeftSpinAngle =1;
-        frontRightSpinAngle =1;
-        backLeftDriveGain =1;
-        backRightDriveGain =1;
-        frontLeftDriveGain= 1;
-        frontRightDriveGain = 1;
-        if (leftBumper){
-           if (prevDrCmd<.8){
-              drCmd = prevDrCmd +.01;
-           } else {
-              drCmd=.8;
-           }
-        } else {
-           if (prevDrCmd>.1){
-              drCmd = prevDrCmd -.01;
-           } else {
-              drCmd=.1;
-           }
-           drCmd = .1;
-        }
-     }
+      }
+      if (buttonX) {
+         desiredAngle = 0;
+         backLeftSpinAngle = 90;
+         backRightSpinAngle = 90;
+         frontLeftSpinAngle =90;
+         frontRightSpinAngle =90;
+         backLeftDriveGain =1;
+         backRightDriveGain =1;
+         frontLeftDriveGain= 1;
+         frontRightDriveGain = 1;
+         if (leftBumper) {
+            if (prevDrCmd < MAX_BUTTON_SPEED){
+               drCmd = prevDrCmd +.01;
+            } else {
+               drCmd = MAX_BUTTON_SPEED;
+            }
+         } else {
+            if (prevDrCmd > MIN_BUTTON_SPEED) {
+               drCmd = prevDrCmd -.01;
+            } else {
+              drCmd = MIN_BUTTON_SPEED;
+            }
+         }
+      }
+      if (buttonY) {
+         desiredAngle = 0;
+         backLeftSpinAngle = 1;
+         backRightSpinAngle = 1;
+         frontLeftSpinAngle =1;
+         frontRightSpinAngle =1;
+         backLeftDriveGain =1;
+         backRightDriveGain =1;
+         frontLeftDriveGain= 1;
+         frontRightDriveGain = 1;
+         if (leftBumper){
+            if (prevDrCmd < MAX_BUTTON_SPEED){
+               drCmd = prevDrCmd +.01;
+            } else {
+               drCmd = MAX_BUTTON_SPEED;
+            } 
+         } else {
+            if (prevDrCmd > MIN_BUTTON_SPEED){
+               drCmd = prevDrCmd -.01;
+            } else {
+               drCmd = MIN_BUTTON_SPEED;
+            }
+         }
+      }
+      // defensive position
       if (m_driverController.getPOV()>45&&m_driverController.getPOV()<135){
          desiredAngle = 0;
          backLeftSpinAngle = -45;
@@ -644,17 +631,15 @@ public class Robot extends TimedRobot {
          frontLeftDriveGain= 1;
          frontRightDriveGain = -1;
 
-         drCmd = 0 * orientation;
+         drCmd = 0.0;
       }
 
       //next two sections deal with rotating the robot 180 degrees
       // turning it around - yaw
       other_yaw = Double.valueOf(yaw);
-      kp_yaw = 0.009;
-      ki_yaw = 0.0001;
-      kd_yaw = 0.0001;
+      
 
-      if (rightTrigger > 0.5){
+      if (rightTrigger > 0.5) {
          desiredAngle = 0;
          backLeftSpinAngle = 45;
          backRightSpinAngle = -45;
@@ -674,8 +659,8 @@ public class Robot extends TimedRobot {
          if (drCmd > 0.3) {drCmd = 0.3;}
          if (drCmd < -0.3) {drCmd = -0.3;}
          prevYawFlipError = yawFlipError;
-       }
-       else if (leftTrigger > 0.5) {
+      }
+      else if (leftTrigger > 0.5) {
          desiredAngle = 0;
          backLeftSpinAngle = 45;
          backRightSpinAngle = -45;
@@ -907,6 +892,7 @@ public class Robot extends TimedRobot {
       frcmd =  wheelAngle(frontRightSpinError, frontRightSpinErrorSum);       
       blcmd = -wheelAngle(backLeftSpinError,   backLeftSpinErrorSum);
       brcmd = -wheelAngle(backRightSpinError,  backRightSpinErrorSum);
+
       m_frontLeftSteer.set(flcmd);
       m_frontRightSteer.set(frcmd);
       m_backLeftSteer.set(blcmd);
@@ -958,6 +944,89 @@ public class Robot extends TimedRobot {
      return(complete);
    }
 
+// Drive Forward Inches
+// used in autonomous mode
+//
+public boolean turnDegrees(double desiredDegrees, double powerInput) {
+   boolean complete = false; 
+   double driveYaw;
+   double power = 0;
+   
+   driveYaw = Double.valueOf(yaw);
+   
+   if (driveYaw < 0) {
+      driveYaw = driveYaw + 360;
+   }
+
+   if (timeInit == false)  {
+      yawInit = driveYaw;
+      timeInit = true;
+   }
+   //
+   // wheel spin
+   // error = desired - current
+   //
+   // target is 0
+   backLeftSpinAngle   =  45;
+   backRightSpinAngle  = -45;
+   frontLeftSpinAngle  = -45;
+   frontRightSpinAngle =  45;
+
+   frontRightSpinError = frontRightSpinAngle - frontRightEncoder.getPosition();
+   backRightSpinError  = backRightSpinAngle - backRightEncoder.getPosition();
+   frontLeftSpinError  = frontLeftSpinAngle - frontLeftEncoder.getPosition();
+   backLeftSpinError   = backLeftSpinAngle - backLeftEncoder.getPosition();
+  
+   //
+   // needed for I term which isn't essential for wheel spin control
+   //
+   frontRightSpinErrorSum = 0.0; //frontRightSpinErrorSum+frontRightSpinError*TIME_STEP;
+   backRightSpinErrorSum = 0.0;  //backRightSpinErrorSum+backRightSpinError*TIME_STEP;
+   frontLeftSpinErrorSum = 0.0;  //frontLeftSpinErrorSum+frontLeftSpinError*TIME_STEP;
+   backLeftSpinErrorSum = 0.0;   //backLeftSpinErrorSum+backLeftSpinError*TIME_STEP;
+
+   // calculate the required motor power command to get to desired wheel angle
+   flcmd = -wheelAngle(frontLeftSpinError,  frontLeftSpinErrorSum);
+   frcmd =  wheelAngle(frontRightSpinError, frontRightSpinErrorSum);       
+   blcmd = -wheelAngle(backLeftSpinError,   backLeftSpinErrorSum);
+   brcmd = -wheelAngle(backRightSpinError,  backRightSpinErrorSum);
+
+   m_frontLeftSteer.set(flcmd);
+   m_frontRightSteer.set(frcmd);
+   m_backLeftSteer.set(blcmd);
+   m_backRightSteer.set(brcmd);
+
+   // yaw 
+   yawFlipError = desiredDegrees-driveYaw;
+   yawFlipErrorSum = yawFlipErrorSum + (yawFlipError * TIME_STEP);
+
+   power = (kp_yaw*yawFlipError)+(ki_yaw*yawFlipErrorSum)+(kd_yaw*(yawFlipError-prevYawFlipError));
+   if (power > 0.3) {power = 0.3;}
+   if (power < -0.3) {power = -0.3;}
+   prevYawFlipError = yawFlipError;
+
+   if (Math.abs(yawFlipError) > 5) { 
+      power = (kp_yaw*yawFlipError)+(ki_yaw*yawFlipErrorSum)+(kd_yaw*(yawFlipError-prevYawFlipError));
+      if (power > 0.3) {power = 0.3;}
+      if (power < -0.3) {power = -0.3;}
+      prevYawFlipError = yawFlipError;
+      m_frontLeftDrive.set(power);
+      m_frontRightDrive.set(power);
+      m_backLeftDrive.set(power);
+      m_backRightDrive.set(power);
+   } else {
+      m_frontLeftSteer.set(0);
+      m_frontRightSteer.set(0);
+      m_backLeftSteer.set(0);
+      m_backRightSteer.set(0);
+      m_frontLeftDrive.set(0);
+      m_frontRightDrive.set(0);
+      m_backLeftDrive.set(0);
+      m_backRightDrive.set(0);
+      complete=true;
+   }
+   return(complete);
+}
    //
    // Balance Pitch
    // used in autonomous mode to balance on the charging station
@@ -1041,7 +1110,7 @@ public class Robot extends TimedRobot {
 // used in teleop mode
 // NOTE:  THIS COULD BE IMPROVED
 //
-   public double angleWrap(double current, double desired)
+   public static double angleWrap(double current, double desired)
    {
       if ((current < -450)) {
          if (desired > 90) {
@@ -1124,7 +1193,7 @@ public class Robot extends TimedRobot {
       }
 
       if (y) {
-         target = zeroPosition+130; //target for medium was 45
+         target = zeroPosition+130; //target for medium was 45, we used 45 for day 1 at St. Joe
       }
 
       if (x) {
@@ -1146,10 +1215,12 @@ public class Robot extends TimedRobot {
    }
 
    public static double determineWinchPower(double desiredPos, double currentPos, boolean limitSwitch) {
-      double Kp_winch = 0.05;
+      double Kp_winch = 0.07;
       double winchPower;
       double maxDesiredPosition = 140;
 
+      // this is the winch protection code trying to prevent it from extending 
+      // too far and flipping
       if (desiredPos > maxDesiredPosition) {desiredPos = maxDesiredPosition;}
 
       winchPower = Kp_winch * (desiredPos-currentPos);
@@ -1165,7 +1236,7 @@ public class Robot extends TimedRobot {
    }
 
    public static double determinePivotPower(double error, double prevError) {
-      double Kp_arm = 0.028;//0.035  //  0.03
+      double Kp_arm = 0.045;//0.035  //  0.03
       double Kd_arm = 0.09; //0.065  // 0.085
       double pivotPower;
 
