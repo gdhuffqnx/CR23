@@ -121,6 +121,7 @@ public class Robot extends TimedRobot {
    float yaw;
    int debug_timer;
    public int stateCounter;
+   public int errorCounter;
 
    BooleanLogEntry myBooleanLog;
    DoubleLogEntry myDoubleLog;
@@ -178,7 +179,7 @@ public class Robot extends TimedRobot {
       m_armPivot.setInverted(false); 
       m_armWinch.setInverted(false);   
       
-      m_pincher.set(PINCHER_OPEN);
+      m_pincher.set(PINCHER_CLOSED);
 
       // initializing global variables to zero
       frontRightSpinErrorSum = 0;
@@ -207,6 +208,7 @@ public class Robot extends TimedRobot {
       prevDesiredAngle = 0;
       prevGain = 0;
       stateCounter = 0;
+      errorCounter = 0;
       prevDrCmd = 0;
       prevArmTarget = 0; 
       prevArmPivotError = 0; 
@@ -254,9 +256,10 @@ public class Robot extends TimedRobot {
          case 0: // initalize
             prevArmTarget = currentArmPosition;
             prevWinchTarget = currentWinchPosition;
-            m_pincher.set(PINCHER_OPEN); 
+            m_pincher.set(PINCHER_CLOSED); 
             armWinchLimitPosition = 0.0;
             stateCounter = 0;
+            errorCounter = 0;
             debug_timer = 0;
             pitchCounter = 0;
             state++;
@@ -275,19 +278,23 @@ public class Robot extends TimedRobot {
             }
          break;
          case 2: //move arm pivot to the limit switch to calibrate
-            if (armPivotLimitSwitch|| stateCounter > 200) {
-               armPivotLimitPosition = currentArmPosition;
-               state++;
-               stateCounter = 0;
-            }
             stateCounter++;
-            desiredPivotTarget = determinePivotTarget(false, false, false, false, prevArmTarget, currentArmPosition, -0.8, armPivotLimitSwitch, armPivotLimitPosition);
+            desiredPivotTarget = determinePivotTarget(false, false, true, false, prevArmTarget, currentArmPosition, 0.0, armPivotLimitSwitch, armPivotLimitPosition);
             prevArmTarget = desiredPivotTarget; 
             armPivotError = desiredPivotTarget-currentArmPosition;
             armPivotPower = determinePivotPower(armPivotError,prevArmPivotError);
             m_armPivot.set(armPivotPower);
             //m_armPivot.getOutputCurrent();
             prevArmPivotError = armPivotError;
+            if (Math.abs(armPivotError) < 2) {
+               errorCounter++;
+            }
+            if ((errorCounter >  10) || stateCounter > 200) {
+               armPivotLimitPosition = currentArmPosition;
+               state++;
+               stateCounter = 0;
+               errorCounter = 0;
+            }
          break;
          case 3:
             m_pincher.set(PINCHER_CLOSED); //close
@@ -297,20 +304,7 @@ public class Robot extends TimedRobot {
                stateCounter = 0;
             }
          break;
-         case 4: //get arm to position
-            desiredPivotTarget = determinePivotTarget(false, false, true, false, prevArmTarget, currentArmPosition, 0.0, armPivotLimitSwitch, armPivotLimitPosition);
-            prevArmTarget = desiredPivotTarget; 
-            armPivotError = desiredPivotTarget-currentArmPosition;
-            armPivotPower = determinePivotPower(armPivotError,prevArmPivotError);
-            m_armPivot.set(armPivotPower);
-            prevArmPivotError = armPivotError;
-            if ((Math.abs(armPivotError) < 2.0)&&(stateCounter >  100)) {
-               state++;
-               stateCounter = 0;
-           }
-            stateCounter++;
-         break;
-         case 5:
+         case 4:
             desiredWinchTarget = determineWinchTarget(false, false, false, true, prevWinchTarget, currentWinchPosition, 0,armWinchLimitSwitch, armWinchLimitPosition);
             prevWinchTarget = desiredWinchTarget; 
             armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
@@ -323,7 +317,7 @@ public class Robot extends TimedRobot {
             }
             stateCounter++;
          break;
-         case 6:
+         case 5:
             m_pincher.set(PINCHER_OPEN);
             stateCounter++;
             if (stateCounter > 100) {
@@ -331,7 +325,7 @@ public class Robot extends TimedRobot {
                stateCounter = 0;
             }
          break;
-         case 7: 
+         case 6: 
             desiredWinchTarget = determineWinchTarget(true, false, false, false, prevWinchTarget, currentWinchPosition, 0,armWinchLimitSwitch, armWinchLimitPosition);
             prevWinchTarget = desiredWinchTarget; 
             armWinchPower = determineWinchPower(desiredWinchTarget,currentWinchPosition,armWinchLimitSwitch); 
@@ -340,7 +334,7 @@ public class Robot extends TimedRobot {
             {
                m_armWinch.set(0);
             }
-            if (driveForwardInches(40, 0.25)) { //140 is competition value
+            if (driveForwardInches(140, 0.45)) { //140 is competition value
                state++;
                m_armPivot.set(0);
             }
@@ -352,13 +346,26 @@ public class Robot extends TimedRobot {
                }
             }
          break;
-         case 8:
-           // if (turnDegrees(180,0.25)) {
-            //   state++;
-           // }
+         case 7:
+
+            if (turnDegrees(180,0.45)) {
+               state++;
+            }
          break;
-         case 9:
-            // Done
+         case 8:
+         desiredPivotTarget = determinePivotTarget(false, false, false, false, prevArmTarget, currentArmPosition, -0.5, armPivotLimitSwitch, armPivotLimitPosition);
+         prevArmTarget = desiredPivotTarget; 
+         armPivotError = desiredPivotTarget-currentArmPosition;
+         armPivotPower = determinePivotPower(armPivotError,prevArmPivotError);
+         m_armPivot.set(armPivotPower);
+         //m_armPivot.getOutputCurrent();
+         prevArmPivotError = armPivotError;
+
+            stateCounter++;
+              if (stateCounter > 150) {
+               state++;
+               stateCounter = 0;
+            }
          break;
          case 20: 
             //we're trying to balance on the platform
@@ -366,8 +373,10 @@ public class Robot extends TimedRobot {
                state++;
             }
          break;
-         case 21:
-            //Done 
+         case 33:
+            if (turnDegrees(180,0.25)) {
+               state++;
+            }
          break;
       }
       if (debug_timer > 9)
@@ -375,10 +384,10 @@ public class Robot extends TimedRobot {
          //myBooleanLog.append(armPivotLimitSwitch);
          myDoubleLog.append(currentWinchPosition);
          myDoubleLog.append(Double.valueOf(state));
-         myDoubleLog.append(m_armPivot.getOutputCurrent());
-         myDoubleLog.append(e_armPivot.getVelocity());
+         myDoubleLog.append(currentArmPosition);
          myDoubleLog.append(armPivotError);
-         //myDoubleLog.append(e_frontRightDrive.getPosition());
+         myDoubleLog.append(Double.valueOf(yaw));
+         myDoubleLog.append(desiredPivotTarget);
          //myDoubleLog.append(e_backLeftDrive.getPosition());
          //myDoubleLog.append(e_backRightDrive.getPosition());
          //myDoubleLog.append(frontRightEncoder.getPosition());
@@ -835,13 +844,13 @@ public class Robot extends TimedRobot {
       if (debug_timer > 9)
       {
          myBooleanLog.append(armPivotLimitSwitch);
-         //myDoubleLog.append(currentWinchPosition);
+         myDoubleLog.append(currentWinchPosition);
          //myDoubleLog.append(desiredWinchTarget);
          //myDoubleLog.append(armWinchPower);
          //myDoubleLog.append(armWinchLimitPosition);
          myDoubleLog.append(currentArmPosition);
-         myDoubleLog.append(desiredPivotTarget);
-         myDoubleLog.append(armPivotPower);
+        // myDoubleLog.append(desiredPivotTarget);
+         //myDoubleLog.append(armPivotPower);
          //myDoubleLog.append(e_backRightDrive.getPosition());
          //myDoubleLog.append(frontRightEncoder.getPosition());
          //myDoubleLog.append(brcmd);
@@ -997,6 +1006,11 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
    m_backRightSteer.set(brcmd);
 
    // yaw 
+   backLeftDriveGain =1;
+   backRightDriveGain =-1;
+   frontLeftDriveGain= 1;
+   frontRightDriveGain = -1;
+
    yawFlipError = desiredDegrees-driveYaw;
    yawFlipErrorSum = yawFlipErrorSum + (yawFlipError * TIME_STEP);
 
@@ -1010,10 +1024,10 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       if (power > 0.3) {power = 0.3;}
       if (power < -0.3) {power = -0.3;}
       prevYawFlipError = yawFlipError;
-      m_frontLeftDrive.set(power);
-      m_frontRightDrive.set(power);
-      m_backLeftDrive.set(power);
-      m_backRightDrive.set(power);
+      m_frontLeftDrive.set(power*frontLeftDriveGain);
+      m_frontRightDrive.set(power*frontRightDriveGain);
+      m_backLeftDrive.set(power*backLeftDriveGain);
+      m_backRightDrive.set(power*backRightDriveGain);
    } else {
       m_frontLeftSteer.set(0);
       m_frontRightSteer.set(0);
@@ -1157,13 +1171,15 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
          }
       }
 
+      if (x) {
+         target = zeroPosition+15; 
+      }
+
       if (y) {
          target = zeroPosition+21;
       }
 
-      if (x) {
-         target = zeroPosition+23; 
-      }
+
       if (joyX > 0.2) {
          target = target + (joyX*gain);
       }
