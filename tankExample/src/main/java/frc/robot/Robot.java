@@ -20,7 +20,7 @@ import edu.wpi.first.wpilibj.DataLogManager;
 //import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.PneumaticsModuleType;
 import edu.wpi.first.wpilibj.Compressor;
-//import edu.wpi.first.wpilibj.Solenoid;
+import edu.wpi.first.wpilibj.Solenoid;
 import com.kauailabs.navx.frc.AHRS;
 import edu.wpi.first.wpilibj.SPI;
 import com.ctre.phoenix.sensors.CANCoder;
@@ -39,14 +39,14 @@ public class Robot extends TimedRobot {
 
    private final DigitalInput m_armPivotLimitSwitch = new DigitalInput(1);
    private final DigitalInput m_armWinchLimitSwitch = new DigitalInput(2);
-   private final DigitalOutput m_pincher = new DigitalOutput(0);
+   //private final DigitalOutput m_pincher = new DigitalOutput(0);
 
    CANCoder frontRightEncoder = new CANCoder(1);
    CANCoder frontLeftEncoder = new CANCoder(0);
    CANCoder backRightEncoder = new CANCoder(2);
    CANCoder backLeftEncoder = new CANCoder(3);
 
-   //private final Solenoid m_solenoid = new Solenoid(PneumaticsModuleType.REVPH, 0);
+   private final Solenoid m_pincher = new Solenoid(12, PneumaticsModuleType.REVPH, 0);
   private final Compressor m_compressor = new Compressor(12, PneumaticsModuleType.REVPH);
 
    private boolean timeInit;
