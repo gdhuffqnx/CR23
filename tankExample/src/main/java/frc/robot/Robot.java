@@ -1118,12 +1118,12 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
 
       return(powerCmd);
    }
-//
-// Angle Angle - attempts to set the desired gear in the same
-// 0-360 or 360-720 etc range
-// used in teleop mode
-// NOTE:  THIS COULD BE IMPROVED
-//
+   //
+   // Angle Angle - attempts to set the desired gear in the same
+   // 0-360 or 360-720 etc range
+   // used in teleop mode
+   // NOTE:  THIS COULD BE IMPROVED
+   //
    public static double angleWrap(double current, double desired)
    {
       if ((current < -450)) {
@@ -1150,7 +1150,7 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
    }
 
    // determine the desired position of the arm pivot
-   public static double determinePivotTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition, double joyX, boolean limitSwitch, double zeroPosition)
+   public double determinePivotTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition, double joyX, boolean limitSwitch, double zeroPosition)
    {
       double target; 
       double gain = 1;
@@ -1179,7 +1179,6 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
          target = zeroPosition+21;
       }
 
-
       if (joyX > 0.2) {
          target = target + (joyX*gain);
       }
@@ -1187,18 +1186,16 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
          if (!limitSwitch) {
             target = target + (joyX*gain);
          }
-         //if (target < 0) {target = 0;}
       }
       if (target > zeroPosition+30) {target = zeroPosition+30;}
-      //if (target < -5) {target = -5;}
       
       return (prevTgt+ (0.25*(target - prevTgt)));
    }
    
-   public static double determineWinchTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition, double joyY, boolean limitSwitch, double zeroPosition)
+   public double determineWinchTarget(boolean a,boolean b,boolean x, boolean y, double prevTgt, double winchPosition, double joyY, boolean limitSwitch, double zeroPosition)
    {
       double target; 
-      double gain = 3;
+      double gain = 2;
       target = prevTgt; 
       if (a) {
          target = zeroPosition; 
@@ -1218,6 +1215,9 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       if (joyY > 0.2) {
          target = target + (joyY*gain);
       }
+      if (m_armController.getLeftBumperReleased()) {
+         target = zeroPosition;
+      }
       if (joyY < -0.2) {
          if (!limitSwitch) {
             target = target + (joyY*gain);
@@ -1226,15 +1226,20 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
          }
          //if (target < 0) {target = 0;}
       }
-      return(prevTgt+ (0.25*(target - prevTgt)));
+      return(prevTgt+ (0.33*(target - prevTgt)));
       //   return 
    }
 
-   public static double determineWinchPower(double desiredPos, double currentPos, boolean limitSwitch) {
-      double Kp_winch = 0.07;
+   public double determineWinchPower(double desiredPos, double currentPos, boolean limitSwitch) {
       double winchPower;
+      double Kp_winch;
       double maxDesiredPosition = 140;
+      double powerLim;
 
+      Kp_winch = 0.09;
+      powerLim = 0.7;
+ 
+     
       // this is the winch protection code trying to prevent it from extending 
       // too far and flipping
       if (desiredPos > maxDesiredPosition) {desiredPos = maxDesiredPosition;}
@@ -1243,23 +1248,37 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
 
       if (limitSwitch && (winchPower < 0.0)) {
          winchPower = 0.01;
-      } else {
+      } 
 
-      }
-      if (winchPower > 0.5)  {winchPower = 0.5;} //positive is in
-      if (winchPower < -0.5) {winchPower = -0.5;}  //negative is out
-      return(winchPower); 
+      if (winchPower > powerLim)  {winchPower = powerLim;}   //positive is in
+      if (winchPower < -powerLim) {winchPower = -powerLim;}  //negative is out
+
+      return(winchPower);
    }
 
-   public static double determinePivotPower(double error, double prevError) {
-      double Kp_arm = 0.045;//0.035  //  0.03
-      double Kd_arm = 0.09; //0.065  // 0.085
+   public double determinePivotPower(double error, double prevError) {
+      double Kp_arm;
+      double Kd_arm;
       double pivotPower;
+      double maxPower;
+      boolean leftBumper;
+
+      leftBumper = m_armController.getLeftBumper();
+
+      if (leftBumper) {
+         Kp_arm = 0.0175;
+         Kd_arm = 0.065; 
+         maxPower = 0.3;
+      } else {
+         Kp_arm = 0.045;
+         Kd_arm = 0.09; 
+         maxPower = 0.7;
+      }
 
       pivotPower = Kp_arm*(error) + Kd_arm*(error-prevError);
 
-      if (pivotPower > 0.7) {pivotPower = 0.7;}
-      if (pivotPower < -0.7) {pivotPower = -0.7;}
+      if (pivotPower > maxPower) {pivotPower = maxPower;}
+      if (pivotPower < -maxPower) {pivotPower = -maxPower;}
 
       return(pivotPower);
    }
@@ -1292,32 +1311,3 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       return(0.1);
    }
 } //END
-
-
-
-
-  /* public static double closestAngle(double a, double b)
-   {
-        // get direction
-        double dir = (b * 360.0) - (a * 360.0);
-
-        // convert from -360 to 360 to -180 to 180
-        if (Math.abs(dir) > 180.0)
-        {
-                dir = -(Math.signum(dir) * 360.0) + dir;
-        }
-        return dir;
-   }
-   
-   
-   public void setDirection(double setpoint)
-{
-    directionController.reset();
-
-    // use the fastest way
-    double currentAngle = directionSensor.get();
-    directionController.setSetpoint(currentAngle + closestAngle(currentAngle, setpoint));
-
-    directionController.enable();
-}
-*/
