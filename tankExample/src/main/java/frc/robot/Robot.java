@@ -29,6 +29,8 @@ import com.revrobotics.RelativeEncoder;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DigitalOutput;
+import edu.wpi.first.cameraserver.CameraServer;
+import edu.wpi.first.cscore.UsbCamera;
 
 public class Robot extends TimedRobot {
 
@@ -52,6 +54,7 @@ public class Robot extends TimedRobot {
    private boolean timeInit;
    private int counter;
    private int pitchCounter;
+   private int pitch2Counter;
    private double TIME_STEP;
    private double distance;
    private double distanceInit;
@@ -63,6 +66,7 @@ public class Robot extends TimedRobot {
    private double prevDesiredAngle;
    private double prevGain;
    private double prevDrCmd;
+   private double balancePitchGain;
 
    private double backLeftSpinAngle;
    private double backRightSpinAngle;
@@ -122,6 +126,7 @@ public class Robot extends TimedRobot {
    int debug_timer;
    public int stateCounter;
    public int errorCounter;
+   public double PITCH_ANGLE;
 
    BooleanLogEntry myBooleanLog;
    DoubleLogEntry myDoubleLog;
@@ -150,11 +155,15 @@ public class Robot extends TimedRobot {
    private RelativeEncoder e_armPivot;
    private RelativeEncoder e_armWinch;
 
+   UsbCamera camera1;
+   UsbCamera camera2;
+
    @Override
    public void robotInit() {
       
       PINCHER_OPEN = true;
       PINCHER_CLOSED = !PINCHER_OPEN;
+      PITCH_ANGLE = 7.5;
 
       // yaw PID values used in autonomous and teleop
       kp_yaw = 0.009;
@@ -163,6 +172,10 @@ public class Robot extends TimedRobot {
       
       // important constant
       TIME_STEP = 0.02;  // 50 hertz
+
+      // Start camera
+      camera1 = CameraServer.startAutomaticCapture(0);
+      camera2 = CameraServer.startAutomaticCapture(1);
 
       //Enabling the compressor
       m_compressor.enableDigital();
@@ -202,6 +215,7 @@ public class Robot extends TimedRobot {
       timeInit = false;
       counter = 0;
       pitchCounter = 0;
+      pitch2Counter = 0;
       distance = 0;
       pitch = 0;
       yaw = 0;
@@ -213,6 +227,7 @@ public class Robot extends TimedRobot {
       prevArmTarget = 0; 
       prevArmPivotError = 0; 
       debug_timer = 0;
+      balancePitchGain = 1.0;
 
       // Initialize the gyro in robot init
       gyro.calibrate();
@@ -334,14 +349,14 @@ public class Robot extends TimedRobot {
             {
                m_armWinch.set(0);
             }
-            if (driveForwardInches(140, 0.45)) { //140 is competition value
+            if (driveForwardInches(140, 0.30)) { //140 is competition value
                state++;
                m_armPivot.set(0);
             }
-            if (pitch > 5.0) {
+            if (pitch > PITCH_ANGLE) {
                pitchCounter++;
-               if (pitchCounter > 10) {
-                 // state = 20; // go balance
+               if (pitchCounter > 40) {
+                 state = 20; // go balance
                   pitchCounter = 0;
                }
             }
@@ -369,7 +384,7 @@ public class Robot extends TimedRobot {
          break;
          case 20: 
             //we're trying to balance on the platform
-            if(balancePitch(0.05)) {
+            if(balancePitch(0.2)) {
                state++;
             }
          break;
@@ -382,12 +397,12 @@ public class Robot extends TimedRobot {
       if (debug_timer > 9)
       {
          //myBooleanLog.append(armPivotLimitSwitch);
-         myDoubleLog.append(currentWinchPosition);
+         //myDoubleLog.append(currentWinchPosition);
          myDoubleLog.append(Double.valueOf(state));
-         myDoubleLog.append(currentArmPosition);
-         myDoubleLog.append(armPivotError);
-         myDoubleLog.append(Double.valueOf(yaw));
-         myDoubleLog.append(desiredPivotTarget);
+         //myDoubleLog.append(currentArmPosition);
+         //myDoubleLog.append(armPivotError);
+         myDoubleLog.append(Double.valueOf(pitch));
+         //myDoubleLog.append(desiredPivotTarget);
          //myDoubleLog.append(e_backLeftDrive.getPosition());
          //myDoubleLog.append(e_backRightDrive.getPosition());
          //myDoubleLog.append(frontRightEncoder.getPosition());
@@ -1048,6 +1063,7 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
    //
    public boolean balancePitch(double power){
       boolean complete = false; 
+      
       double blcmd;
       double brcmd;
       double flcmd;
@@ -1066,31 +1082,86 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       if (timeInit == false)  {
          timeInit = true;
          pitchCounter = 0;
+         pitch2Counter = 0;
+         balancePitchGain = 1.0;
       }
-    
-      if ((pitch) > (5.0)) {
-         flcmd = -power;
-         frcmd = -power;
-         blcmd = -power;
-         brcmd = -power;
+          //
+      // wheel spin
+      // error = desired - current
+      //
+      // target is 0
+      frontRightSpinError = 0 - frontRightEncoder.getPosition();
+      backRightSpinError  = 0 - backRightEncoder.getPosition();
+      frontLeftSpinError  = 0 - frontLeftEncoder.getPosition();
+      backLeftSpinError   = 0 - backLeftEncoder.getPosition();
+     
+      //
+      // needed for I term which isn't essential for wheel spin control
+      //
+      frontRightSpinErrorSum = 0.0; //frontRightSpinErrorSum+frontRightSpinError*TIME_STEP;
+      backRightSpinErrorSum = 0.0;  //backRightSpinErrorSum+backRightSpinError*TIME_STEP;
+      frontLeftSpinErrorSum = 0.0;  //frontLeftSpinErrorSum+frontLeftSpinError*TIME_STEP;
+      backLeftSpinErrorSum = 0.0;   //backLeftSpinErrorSum+backLeftSpinError*TIME_STEP;
+
+      // calculate the required motor power command to get to desired wheel angle
+      flcmd = -wheelAngle(frontLeftSpinError,  frontLeftSpinErrorSum);
+      frcmd =  wheelAngle(frontRightSpinError, frontRightSpinErrorSum);       
+      blcmd = -wheelAngle(backLeftSpinError,   backLeftSpinErrorSum);
+      brcmd = -wheelAngle(backRightSpinError,  backRightSpinErrorSum);
+
+      m_frontLeftSteer.set(flcmd);
+      m_frontRightSteer.set(frcmd);
+      m_backLeftSteer.set(blcmd);
+      m_backRightSteer.set(brcmd);
+      
+      if ((pitch) > (PITCH_ANGLE)) {
+         flcmd = -power*balancePitchGain;
+         frcmd = -power*balancePitchGain;
+         blcmd = -power*balancePitchGain;
+         brcmd = -power*balancePitchGain;
          m_frontLeftDrive.set(flcmd);
          m_frontRightDrive.set(frcmd);
          m_backLeftDrive.set(blcmd);
          m_backRightDrive.set(brcmd);
-      } else if(pitch < (-5.0)) {
-         flcmd = power*0.75;
-         frcmd = power*0.75;
-         blcmd = power*0.75;
-         brcmd = power*0.75;
+      } else if(pitch < (-PITCH_ANGLE)) {
+         if (pitch2Counter < 20) {
+            pitch2Counter++;
+            flcmd = 0;
+            frcmd = 0;
+            blcmd = 0;
+            brcmd = 0;
+         } else {
+            flcmd = power*balancePitchGain;
+            frcmd = power*balancePitchGain;
+            blcmd = power*balancePitchGain;
+            brcmd = power*balancePitchGain;
+         }
          m_frontLeftDrive.set(flcmd);
          m_frontRightDrive.set(frcmd);
          m_backLeftDrive.set(blcmd);
          m_backRightDrive.set(brcmd);
       } else {
-         m_frontLeftDrive.set(0.0);
-         m_frontRightDrive.set(0.0);
-         m_backLeftDrive.set(0.0);
-         m_backRightDrive.set(0.0);  
+
+         if (pitchCounter == 3) {
+            balancePitchGain = balancePitchGain * 0.8;
+         }
+
+         if (pitchCounter < 10) {
+            flcmd = power*balancePitchGain;
+            frcmd = power*balancePitchGain;
+            blcmd = power*balancePitchGain;
+            brcmd = power*balancePitchGain;
+         } else {
+            flcmd = 0;
+            frcmd = 0;
+            blcmd = 0;
+            brcmd = 0; 
+         }
+         m_frontLeftDrive.set(flcmd);
+         m_frontRightDrive.set(frcmd);
+         m_backLeftDrive.set(blcmd);
+         m_backRightDrive.set(brcmd);
+
          pitchCounter++;
          if (pitchCounter > 100) {
             complete = true; 
@@ -1172,7 +1243,7 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       }
 
       if (x) {
-         target = zeroPosition+15; 
+         target = zeroPosition+17; 
       }
 
       if (y) {
