@@ -19,6 +19,8 @@ import edu.wpi.first.util.datalog.StringLogEntry;
 import edu.wpi.first.wpilibj.DataLogManager;
 //import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.PneumaticsModuleType;
+import edu.wpi.first.wpilibj.AddressableLED;
+import edu.wpi.first.wpilibj.AddressableLEDBuffer;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.Solenoid;
 import com.kauailabs.navx.frc.AHRS;
@@ -110,6 +112,7 @@ public class Robot extends TimedRobot {
 
    private boolean PINCHER_OPEN;
    private boolean PINCHER_CLOSED;
+   private double PITCH_ANGLE;
 
    private double currentArmPosition;
    private double desiredPivotTarget; 
@@ -126,13 +129,12 @@ public class Robot extends TimedRobot {
    int debug_timer;
    public int stateCounter;
    public int errorCounter;
-   public double PITCH_ANGLE;
 
    BooleanLogEntry myBooleanLog;
    DoubleLogEntry myDoubleLog;
    StringLogEntry myStringLog;
 
-   AHRS gyro = new AHRS(SPI.Port.kMXP);
+      AHRS gyro = new AHRS(SPI.Port.kMXP);
 
    private final CANSparkMax m_frontLeftDrive  = new CANSparkMax(1, MotorType.kBrushless);
    private final CANSparkMax m_frontRightDrive = new CANSparkMax(3, MotorType.kBrushless);
@@ -161,10 +163,15 @@ public class Robot extends TimedRobot {
    @Override
    public void robotInit() {
       
+      AddressableLED m_led = new AddressableLED(9);
+      AddressableLEDBuffer m_ledBuffer = new AddressableLEDBuffer(60);
+      m_led.setLength(m_ledBuffer.getLength());
+      m_led.setData(m_ledBuffer);
+      m_led.start();
+
       PINCHER_OPEN = true;
       PINCHER_CLOSED = !PINCHER_OPEN;
-      PITCH_ANGLE = 7.5;
-
+      PITCH_ANGLE = 12; 
       // yaw PID values used in autonomous and teleop
       kp_yaw = 0.009;
       ki_yaw = 0.0001;
@@ -858,17 +865,19 @@ public class Robot extends TimedRobot {
       // telemtry information, feel free to change as needed
       if (debug_timer > 9)
       {
-         myBooleanLog.append(armPivotLimitSwitch);
-         myDoubleLog.append(currentWinchPosition);
+         //myBooleanLog.append(armPivotLimitSwitch);
+         //myDoubleLog.append(currentWinchPosition);
          //myDoubleLog.append(desiredWinchTarget);
          //myDoubleLog.append(armWinchPower);
          //myDoubleLog.append(armWinchLimitPosition);
-         myDoubleLog.append(currentArmPosition);
+         //myDoubleLog.append(currentArmPosition);
         // myDoubleLog.append(desiredPivotTarget);
          //myDoubleLog.append(armPivotPower);
          //myDoubleLog.append(e_backRightDrive.getPosition());
          //myDoubleLog.append(frontRightEncoder.getPosition());
          //myDoubleLog.append(brcmd);
+         myDoubleLog.append(frontRightEncoder.getPosition());
+         myDoubleLog.append(frontRightEncoder.getAbsolutePosition());
          debug_timer = 0;
       } else {
          debug_timer = debug_timer +1;
@@ -1124,44 +1133,29 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
          m_backLeftDrive.set(blcmd);
          m_backRightDrive.set(brcmd);
       } else if(pitch < (-PITCH_ANGLE)) {
-         if (pitch2Counter < 20) {
+         if (pitch2Counter < 30) {
             pitch2Counter++;
+            balancePitchGain = 0.8;
             flcmd = 0;
             frcmd = 0;
             blcmd = 0;
             brcmd = 0;
          } else {
-            flcmd = power*balancePitchGain;
-            frcmd = power*balancePitchGain;
-            blcmd = power*balancePitchGain;
-            brcmd = power*balancePitchGain;
-         }
+         flcmd = power*balancePitchGain;
+         frcmd = power*balancePitchGain;
+         blcmd = power*balancePitchGain;
+         brcmd = power*balancePitchGain;
+        }
          m_frontLeftDrive.set(flcmd);
          m_frontRightDrive.set(frcmd);
          m_backLeftDrive.set(blcmd);
          m_backRightDrive.set(brcmd);
       } else {
-
-         if (pitchCounter == 3) {
-            balancePitchGain = balancePitchGain * 0.8;
-         }
-
-         if (pitchCounter < 10) {
-            flcmd = power*balancePitchGain;
-            frcmd = power*balancePitchGain;
-            blcmd = power*balancePitchGain;
-            brcmd = power*balancePitchGain;
-         } else {
-            flcmd = 0;
-            frcmd = 0;
-            blcmd = 0;
-            brcmd = 0; 
-         }
-         m_frontLeftDrive.set(flcmd);
-         m_frontRightDrive.set(frcmd);
-         m_backLeftDrive.set(blcmd);
-         m_backRightDrive.set(brcmd);
-
+         m_frontLeftDrive.set(0.0);
+         m_frontRightDrive.set(0.0);
+         m_backLeftDrive.set(0.0);
+         m_backRightDrive.set(0.0);  
+         balancePitchGain = balancePitchGain * 0.995;//.998
          pitchCounter++;
          if (pitchCounter > 100) {
             complete = true; 
