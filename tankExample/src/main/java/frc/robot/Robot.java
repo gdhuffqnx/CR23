@@ -115,6 +115,9 @@ public class Robot extends TimedRobot {
    private final CANSparkMax m_backLeftSteer   = new CANSparkMax(6,MotorType.kBrushless);
    private final CANSparkMax m_backRightSteer  = new CANSparkMax(8, MotorType.kBrushless);
 
+   private final CANSparkMax m_shooterLeft = new CANSparkMax(11, MotorType.kBrushless);
+   private final CANSparkMax m_shooterRight = new CANSparkMax(15, MotorType.kBrushless);
+
    //private final CANSparkMax m_armPivot = new CANSparkMax(9,MotorType.kBrushless);
    //private final CANSparkMax m_armWinch = new CANSparkMax(10,MotorType.kBrushless); 
 
@@ -154,6 +157,9 @@ public class Robot extends TimedRobot {
       m_frontRightDrive.setInverted(true);
       m_backLeftDrive.setInverted(true);  
       m_backRightDrive.setInverted(true);  
+
+      m_shooterRight.setInverted(true);
+      m_shooterLeft.setInverted(false);
       //frontLeftEncoder.
 
       frontLeftEncoder.setPosition(0);
@@ -332,6 +338,16 @@ public class Robot extends TimedRobot {
       drCmd = 0.0;
       yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
+
+      if (button2X) {
+         m_shooterLeft.set(0.5);
+         m_shooterLeft.set(0.5);
+      
+      } else {
+         m_shooterLeft.set(0);
+         m_shooterLeft.set(0);
+      
+      }
 
       //this gain is the drive wheel speed gain
       gainTgt = 0.25; 
