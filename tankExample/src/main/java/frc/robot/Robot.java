@@ -40,15 +40,16 @@ public class Robot extends TimedRobot {
    private final XboxController m_bodyController   = new XboxController(1);
 
    private final DigitalInput m_armPivotLimitSwitch = new DigitalInput(1);
-   //private final DigitalOutput m_pincher = new DigitalOutput(0);
 
    CANCoder frontRightEncoder = new CANCoder(1);
    CANCoder frontLeftEncoder = new CANCoder(0);
    CANCoder backRightEncoder = new CANCoder(3);
    CANCoder backLeftEncoder = new CANCoder(2);
 
-   //private final Solenoid m_pincher = new Solenoid(12, PneumaticsModuleType.REVPH, 0);
-   private final Compressor m_compressor = new Compressor(12, PneumaticsModuleType.REVPH);
+   private final Solenoid p_armPivot        = new Solenoid(12, PneumaticsModuleType.REVPH, 0);
+   private final Solenoid p_collectorRight  = new Solenoid(12, PneumaticsModuleType.REVPH, 1);
+   private final Solenoid p_collectorLeft   = new Solenoid(12, PneumaticsModuleType.REVPH, 2);
+   private final Compressor m_compressor  = new Compressor(12, PneumaticsModuleType.REVPH);
 
    private boolean timeInit;
    private int counter;
@@ -65,6 +66,8 @@ public class Robot extends TimedRobot {
    private double prevDesiredAngle;
    private double prevGain;
    private double prevDrCmd;
+   private double winchPwr;
+   private double prevWinchPwr;
 
    private double backLeftSpinAngle;
    private double backRightSpinAngle;
@@ -97,8 +100,6 @@ public class Robot extends TimedRobot {
    private int state; 
 
    float yaw;
-   float roll;
-   float pitch;
    int debug_timer;
    public int stateCounter;
    public int errorCounter;
@@ -119,11 +120,13 @@ public class Robot extends TimedRobot {
    private final CANSparkMax m_backLeftSteer   = new CANSparkMax(6,MotorType.kBrushless);
    private final CANSparkMax m_backRightSteer  = new CANSparkMax(8, MotorType.kBrushless);
 
-   private final CANSparkMax m_shooterLeft = new CANSparkMax(11, MotorType.kBrushless);
-   private final CANSparkMax m_shooterRight = new CANSparkMax(15, MotorType.kBrushless);
-
-   //private final CANSparkMax m_armPivot = new CANSparkMax(9,MotorType.kBrushless);
-   //private final CANSparkMax m_armWinch = new CANSparkMax(10,MotorType.kBrushless); 
+   private final CANSparkMax m_handoff = new CANSparkMax(9,MotorType.kBrushless); 
+   private final CANSparkMax m_collector = new CANSparkMax(10,MotorType.kBrushless);
+   private final CANSparkMax m_shooterIndexer = new CANSparkMax(11,MotorType.kBrushless); 
+   // CAN ID 12 is the pneumatics hub
+   private final CANSparkMax m_shooterFlywheel = new CANSparkMax(13,MotorType.kBrushless);
+   private final CANSparkMax m_winchOne = new CANSparkMax(14,MotorType.kBrushless);
+   private final CANSparkMax m_winchTwo = new CANSparkMax(15,MotorType.kBrushless);
 
    private RelativeEncoder e_frontLeftDrive;
    private RelativeEncoder e_frontRightDrive;
@@ -164,20 +167,16 @@ public class Robot extends TimedRobot {
       m_backLeftDrive.setInverted(true);  
       m_backRightDrive.setInverted(true);  
 
-      m_shooterRight.setInverted(true);
-      m_shooterLeft.setInverted(false);
-      //frontLeftEncoder.
+      m_collector.setInverted(false); 
+      m_handoff.setInverted(true); 
+      m_shooterFlywheel.setInverted(true); 
+      m_shooterIndexer.setInverted(true);
 
       frontLeftEncoder.setPosition(0);
       frontRightEncoder.setPosition(0);
       backLeftEncoder.setPosition(0);
-      backRightEncoder.setPosition(0);
-
-
-      //m_armPivot.setInverted(false); 
-      //.setInverted(false);   
+      backRightEncoder.setPosition(0);  
       
-
       // initializing global variables to zero
       frontRightSpinErrorSum = 0;
       backRightSpinErrorSum = 0;
@@ -199,20 +198,20 @@ public class Robot extends TimedRobot {
       counter = 0;
       distance = 0;
       yaw = 0;
-      roll = 0;
-      pitch = 0;
       prevDesiredAngle = 0;
       prevGain = 0;
       stateCounter = 0;
       errorCounter = 0;
       prevDrCmd = 0;
       debug_timer = 0;
+	  winchPwr = 0;
+	  prevWinchPwr = 0;
 
       // Initialize the gyro in robot init
       gyro.calibrate();
 
       // assign motor encoders
-	   e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
+	  e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
       e_frontRightDrive = m_frontRightDrive.getEncoder();
       e_backLeftDrive   = m_backLeftDrive.getEncoder();
       e_backRightDrive  = m_backRightDrive.getEncoder();
@@ -234,9 +233,6 @@ public class Robot extends TimedRobot {
    @Override
    public void autonomousPeriodic() {
       
-      
-      //roll = gyro.getRoll();
-      //pitch = gyro.getPitch();
       yaw =gyro.getYaw();
 
       switch(state) {
@@ -352,23 +348,41 @@ public class Robot extends TimedRobot {
       drCmd = 0.0;
       yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
-
-    //  m_ledBuffer.setRGB(100, 255, 0, 0);
-    for (var i = 0; i < m_ledBuffer.getLength(); i++) {
-      // Sets the specified LED to the RGB values for red
-      m_ledBuffer.setRGB(i, 255, 0, 0);
-   }
-    m_led.setData(m_ledBuffer);
-
-      if (button2X) {
-         m_shooterLeft.set(0.5);
-         m_shooterLeft.set(0.5);
-      
+	  
+	  // Ring Collection and handoff code
+      if (button2A) {
+         pickupRing();
       } else {
-         m_shooterLeft.set(0);
-         m_shooterLeft.set(0);
-      
+         m_collector.set(0);
+         m_handoff.set(0);
+         
+         if (p_collectorLeft.get()==true){
+            p_collectorLeft.set(false);
+         }
+         
+         if (p_collectorRight.get()==true){
+            p_collectorRight.set(false);
+         }
       }
+      
+      if (button2X) {
+         powerFlywheel();
+      } 
+
+      if (button2B) {
+         shootRing();
+      } else {
+         m_shooterIndexer.set(0);
+         m_shooterFlywheel.set(0);
+      }
+	  
+	  
+      //  m_ledBuffer.setRGB(100, 255, 0, 0);
+      for (var i = 0; i < m_ledBuffer.getLength(); i++) {
+         // Sets the specified LED to the RGB values for red
+         m_ledBuffer.setRGB(i, 255, 0, 0);
+      }
+      m_led.setData(m_ledBuffer);
 
       //this gain is the drive wheel speed gain
       gainTgt = 0.25; 
@@ -545,12 +559,37 @@ public class Robot extends TimedRobot {
 
          drCmd = 0.0;
       }
+	  
+	  //Winch logic
+      if (button2X){
+         armPivot();
+      }
 
-      //next two sections deal with rotating the robot 180 degrees
+      double MAX_NEGATIVE_PWR = -0.8;
+      double MAX_POSITIVE_PWR =  0.8;
+      if (button2A){
+         if (prevWinchPwr >  MAX_NEGATIVE_PWR){
+            winchPwr = prevWinchPwr -0.01;
+         } else {
+            winchPwr = MAX_NEGATIVE_PWR;
+         }  
+      } else if (button2Y){
+         if (prevWinchPwr < MAX_POSITIVE_PWR){
+            winchPwr = prevWinchPwr +0.01;
+         } else {
+            winchPwr = MAX_POSITIVE_PWR;
+         }
+      } else {
+         winchPwr = 0.0;
+      }
+	  m_winchOne.set(winchPwr);
+      m_winchTwo.set(winchPwr);
+	  prevWinchPwr = winchPwr; 
+	  
+      // next two sections deal with rotating the robot 180 degrees
       // turning it around - yaw
       other_yaw = Double.valueOf(yaw);
       
-
       if (rightTrigger > 0.5) {
          desiredAngle = 0;
          backLeftSpinAngle = 45;
@@ -634,7 +673,7 @@ public class Robot extends TimedRobot {
       }
 	  
       currentAngle = frontLeftEncoder.getPosition();
-      desiredAngle  = angleWrap(currentAngle, desiredAngle);
+      desiredAngle = angleWrap(currentAngle, desiredAngle);
 
       // Here is the logic that allows the wheels to decide whether 
       // to just spin backward or completely flip around
@@ -646,7 +685,7 @@ public class Robot extends TimedRobot {
       } else {
          desiredAngleFlipped = desiredAngle + 180; 
       }
-      /* this section is causing an issue in 2024???*/
+
       if (Math.abs(frontLeftEncoder.getPosition() - desiredAngle)
         > Math.abs(frontLeftEncoder.getPosition() - desiredAngleFlipped)) 
       {
@@ -665,9 +704,7 @@ public class Robot extends TimedRobot {
       // error = desired - current
       //
       frontRightSpinError = filteredAngle+frontRightSpinAngle-frontRightEncoder.getPosition();
-      
       frontLeftSpinError = filteredAngle+frontLeftSpinAngle-frontLeftEncoder.getPosition();
-     
       backRightSpinError = filteredAngle+backRightSpinAngle-backRightEncoder.getPosition();
       backLeftSpinError = filteredAngle+backLeftSpinAngle-backLeftEncoder.getPosition();
      
@@ -686,15 +723,10 @@ public class Robot extends TimedRobot {
       brcmd = wheelAngle(backRightSpinError,  backRightSpinErrorSum);
       
       prevDesiredAngle = filteredAngle;
-     // flcmd = 0.0;
-     // blcmd = 0.0;
-     // frcmd = 0.0;
-     // brcmd = 0.0;
 
       // sending the power commands to the driving and steering motors
       prevDrCmd = drCmd;
-      //drCmd = 0.0;
-      drCmd = drCmd * 0.5;
+
       m_frontLeftDrive.set(drCmd*frontLeftDriveGain);
       m_frontRightDrive.set(drCmd*frontRightDriveGain);
       m_backLeftDrive.set(drCmd*backLeftDriveGain);
@@ -704,53 +736,18 @@ public class Robot extends TimedRobot {
       m_frontRightSteer.set(frcmd);
       m_backLeftSteer.set(blcmd);
       m_backRightSteer.set(brcmd);
-
-      //m_frontLeftSteer.set(0.0);
-      //m_frontRightSteer.set(0.0);
-     // m_backLeftSteer.set(0.0);
-      //m_backRightSteer.set(0.0);
-      //e_frontLeftDrive.getPosition();
-      //e_frontRightDrive.getPosition();
-      //e_backLeftDrive.getPosition();
-      //e_backRightDrive.getPosition();
+	  
       // telemtry information, feel free to change as needed
-
-     // SmartDashboard.putNumber("Debug Timer", debug_timer);
-      
-      //
-      //yawInit = frontRightEncoder.getPosition();
-      //SmartDashboard.putNumber("Front Right Encoder", yawInit);
       //SmartDashboard.putNumber("Back Left Encoder", backLeftEncoder.getPosition());
       //SmartDashboard.putNumber("Back Right Encoder", backRightEncoder.getPosition());  
 
-      //yawInit = frontRightEncoder.getAbsolutePosition();
-      //SmartDashboard.putNumber("Front Right Absolute", yawInit);
-
-
       if (debug_timer >= 9)
       { 
-         SmartDashboard.putNumber("Desired Angle", desiredAngle);
-         SmartDashboard.putNumber("Back Left Steer cmd", blcmd);
-         SmartDashboard.putNumber("Front Left Steer cmd", flcmd);
-         SmartDashboard.putNumber("Back Right Steer cmd", brcmd);
-         SmartDashboard.putNumber("Front Right Steer cmd", frcmd);
-       //  SmartDashboard.putNumber("Back Left Spin Error", backLeftSpinError);
-       //  SmartDashboard.putNumber("Back left spin angle want zero", backLeftSpinAngle);
-       //  SmartDashboard.putNumber("Filtered Angle", filteredAngle);
-         SmartDashboard.putNumber("Back Left Encoder", backLeftEncoder.getPosition());
-         SmartDashboard.putNumber("Front Left Encoder", frontLeftEncoder.getPosition());
-         SmartDashboard.putNumber("Back Right Encoder", backRightEncoder.getPosition());
-         SmartDashboard.putNumber("Front Right Encoder", frontRightEncoder.getPosition());
-         //SmartDashboard.putNumber("Back Left Encoder", backLeftEncoder.getPosition());
-         //SmartDashboard.putNumber("frontLeftSpinError", flcmd);
-
-        // SmartDashboard.putNumber("Front Right drive", drCmd*frontRightDriveGain);
-        // SmartDashboard.putNumber("Front Left drive", drCmd*frontRightDriveGain);
-        // SmartDashboard.putNumber("Back Left drive", drCmd*frontRightDriveGain);
-        // SmartDashboard.putNumber("Back Right drive", drCmd*frontRightDriveGain);
+         //SmartDashboard.putNumber("Back Left Spin Error", backLeftSpinError);
+         //SmartDashboard.putNumber("Back left spin angle want zero", backLeftSpinAngle);
+         //SmartDashboard.putNumber("Filtered Angle", filteredAngle);
          //myBooleanLog.append(armPivotLimitSwitch);
          //myDoubleLog.append(desiredWinchTarget);
-
          debug_timer = 0;
 
       } else {
@@ -1042,5 +1039,35 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
          return(180-57.3*Math.atan(Math.abs(joyX/joyY)));
       }
       return(0.1);
+   }
+   
+// Raise or lower the main arm   
+   private void armPivot() {
+      if (p_armPivot.get()==false){
+         p_armPivot.set(true);
+      } else if (p_armPivot.get()==true){
+         p_armPivot.set(false);
+      } 
+   }
+   
+   
+   public void pickupRing() {
+      m_collector.set(1.0);
+      m_handoff.set(0.25);
+      
+      if (p_collectorLeft.get()==false){ 
+         p_collectorLeft.set(true);
+      }
+      if (p_collectorRight.get()==false){
+         p_collectorRight.set(true);
+      }
+   }
+   
+   public void powerFlywheel() {
+      m_shooterFlywheel.set(1);
+   }
+   
+   public void shootRing() {
+      m_shooterIndexer.set(1);
    }
 } //END
