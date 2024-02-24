@@ -52,10 +52,12 @@ public class Robot extends TimedRobot {
 
    private boolean timeInit;
    private int counter;
+   private int turnCompleteTimer;
    private double TIME_STEP;
    private double distance;
    private double distanceInit;
    private double yawInit;
+   private double yawDesired;
    private double flcmd = 0;
    private double frcmd = 0;
    private double blcmd = 0;
@@ -95,6 +97,8 @@ public class Robot extends TimedRobot {
    private int state; 
 
    float yaw;
+   float roll;
+   float pitch;
    int debug_timer;
    public int stateCounter;
    public int errorCounter;
@@ -126,14 +130,16 @@ public class Robot extends TimedRobot {
    private RelativeEncoder e_backLeftDrive;
    private RelativeEncoder e_backRightDrive;
 
+   AddressableLED m_led = new AddressableLED(9);
+   AddressableLEDBuffer m_ledBuffer = new AddressableLEDBuffer(60);
+
    UsbCamera camera1;
    UsbCamera camera2;
 
    @Override
    public void robotInit() {
       
-      AddressableLED m_led = new AddressableLED(9);
-      AddressableLEDBuffer m_ledBuffer = new AddressableLEDBuffer(60);
+
       m_led.setLength(m_ledBuffer.getLength());
       m_led.setData(m_ledBuffer);
       m_led.start();
@@ -184,13 +190,17 @@ public class Robot extends TimedRobot {
       backLeftSpinError = 0;
 
       yawInit = 0.0;
+      yawDesired = 0.0;
       yawFlipError = 0.0;
       yawFlipErrorSum = 0.0;
       prevYawFlipError = 0.0;
+      turnCompleteTimer = 0;
       timeInit = false;
       counter = 0;
       distance = 0;
       yaw = 0;
+      roll = 0;
+      pitch = 0;
       prevDesiredAngle = 0;
       prevGain = 0;
       stateCounter = 0;
@@ -224,7 +234,10 @@ public class Robot extends TimedRobot {
    @Override
    public void autonomousPeriodic() {
       
-      yaw = gyro.getYaw();
+      
+      //roll = gyro.getRoll();
+      //pitch = gyro.getPitch();
+      yaw =gyro.getYaw();
 
       switch(state) {
          case 0: // initalize
@@ -235,9 +248,12 @@ public class Robot extends TimedRobot {
                state++;
                stateCounter = 0;
             }
+            stateCounter++;
          break;
          case 2: 
-            state++;
+            if (driveForwardInches(5,0.10)) {
+               state++;
+            }
          break;
          case 3:
             stateCounter++;
@@ -247,11 +263,11 @@ public class Robot extends TimedRobot {
             }
          break;
          case 4:
-            state++;
+           // state++;
          break;
          case 5:
             stateCounter++;
-            if (stateCounter > 100) {
+            if (stateCounter > 10) {
                state++;
                stateCounter = 0;
             }
@@ -261,15 +277,13 @@ public class Robot extends TimedRobot {
          break;
          case 7:
 
-            if (turnDegrees(180,0.45)) {
+            if (turnDegrees(-90,0.10)) {  //negative is counter clock wise
                state++;
             }
          break;
          case 8:
-            stateCounter++;
-              if (stateCounter > 150) {
+            if (turnDegrees(90,0.25)) {  //negative is counter clock wise
                state++;
-               stateCounter = 0;
             }
          break;
       }
@@ -338,6 +352,13 @@ public class Robot extends TimedRobot {
       drCmd = 0.0;
       yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
+
+    //  m_ledBuffer.setRGB(100, 255, 0, 0);
+    for (var i = 0; i < m_ledBuffer.getLength(); i++) {
+      // Sets the specified LED to the RGB values for red
+      m_ledBuffer.setRGB(i, 255, 0, 0);
+   }
+    m_led.setData(m_ledBuffer);
 
       if (button2X) {
          m_shooterLeft.set(0.5);
@@ -625,7 +646,7 @@ public class Robot extends TimedRobot {
       } else {
          desiredAngleFlipped = desiredAngle + 180; 
       }
-      /* this section is causing an issue in 2024???
+      /* this section is causing an issue in 2024???*/
       if (Math.abs(frontLeftEncoder.getPosition() - desiredAngle)
         > Math.abs(frontLeftEncoder.getPosition() - desiredAngleFlipped)) 
       {
@@ -634,7 +655,7 @@ public class Robot extends TimedRobot {
          backRightDriveGain  = -backRightDriveGain;
          frontLeftDriveGain  = -frontLeftDriveGain;
          frontRightDriveGain = -frontRightDriveGain;
-      }  */
+      }  
 
       // simple filter to smooth out angle change, this may have a minor bug
       filteredAngle = desiredAngle;//prevDesiredAngle + (0.01*(desiredAngle - prevDesiredAngle));
@@ -673,6 +694,7 @@ public class Robot extends TimedRobot {
       // sending the power commands to the driving and steering motors
       prevDrCmd = drCmd;
       //drCmd = 0.0;
+      drCmd = drCmd * 0.5;
       m_frontLeftDrive.set(drCmd*frontLeftDriveGain);
       m_frontRightDrive.set(drCmd*frontRightDriveGain);
       m_backLeftDrive.set(drCmd*backLeftDriveGain);
@@ -750,7 +772,7 @@ public class Robot extends TimedRobot {
       leftPwr = 0.0;
       driveYaw = Double.valueOf(yaw);
 
-      distance = -e_frontLeftDrive.getPosition();
+      distance = e_frontLeftDrive.getPosition();
       if (timeInit == false)  {
          distanceInit = distance;
          timeInit = true;
@@ -774,23 +796,23 @@ public class Robot extends TimedRobot {
       backLeftSpinErrorSum = 0.0;   //backLeftSpinErrorSum+backLeftSpinError*TIME_STEP;
 
       // calculate the required motor power command to get to desired wheel angle
-      flcmd = -wheelAngle(frontLeftSpinError,  frontLeftSpinErrorSum);
-      frcmd =  wheelAngle(frontRightSpinError, frontRightSpinErrorSum);       
-      blcmd = -wheelAngle(backLeftSpinError,   backLeftSpinErrorSum);
-      brcmd = -wheelAngle(backRightSpinError,  backRightSpinErrorSum);
+      flcmd = wheelAngle(frontLeftSpinError,  frontLeftSpinErrorSum);
+      frcmd = wheelAngle(frontRightSpinError, frontRightSpinErrorSum);       
+      blcmd = wheelAngle(backLeftSpinError,   backLeftSpinErrorSum);
+      brcmd = wheelAngle(backRightSpinError,  backRightSpinErrorSum);
 
       m_frontLeftSteer.set(flcmd);
       m_frontRightSteer.set(frcmd);
       m_backLeftSteer.set(blcmd);
       m_backRightSteer.set(brcmd);
 
-      if ((distance - distanceInit) < (inches*0.56)) {
+      if ((distance - distanceInit) < (inches*0.026)) {   //was 0.56
          power = prevDrCmd + (0.1*(powerInput-prevDrCmd));
-         if (driveYaw > 2) {
-            rightPwr = 0.025*(driveYaw);
-         } else if (driveYaw<-2){
-            leftPwr = -0.025*(driveYaw);
-         }
+         //if (driveYaw > 2) {
+         //   rightPwr = 0.025*(driveYaw);
+         //} else if (driveYaw<-2){
+         //   leftPwr = -0.025*(driveYaw);
+        // }
          // this robot tends to favor the right side motors
          //slow them down a little
          backLeftDriveGain   = 1;
@@ -798,10 +820,10 @@ public class Robot extends TimedRobot {
          frontLeftDriveGain  = 1;
          frontRightDriveGain = 1;
 
-         flcmd = -frontLeftDriveGain*power+leftPwr;
-         frcmd = -frontRightDriveGain*power+rightPwr;
-         blcmd = -backLeftDriveGain*power+leftPwr;
-         brcmd = -backRightDriveGain*power+rightPwr;
+         flcmd = frontLeftDriveGain*power+leftPwr;
+         frcmd = frontRightDriveGain*power+rightPwr;
+         blcmd = backLeftDriveGain*power+leftPwr;
+         brcmd = backRightDriveGain*power+rightPwr;
          prevDrCmd = power;
 
          m_frontLeftDrive.set(flcmd);
@@ -819,9 +841,13 @@ public class Robot extends TimedRobot {
      // telemtry
      if (counter > 9)
      {
-        myDoubleLog.append(rightPwr);
-        myDoubleLog.append(leftPwr);
-        myDoubleLog.append(driveYaw);
+      //distance
+      SmartDashboard.putNumber("Power", power);
+      SmartDashboard.putNumber("Distance", distance);
+      SmartDashboard.putNumber("D Init", distanceInit);
+        //myDoubleLog.append(rightPwr);
+        //myDoubleLog.append(leftPwr);
+        //myDoubleLog.append(driveYaw);
         counter = 0;
      } else {
         counter = counter +1;
@@ -833,29 +859,84 @@ public class Robot extends TimedRobot {
 // used in autonomous mode
 //
 public boolean turnDegrees(double desiredDegrees, double powerInput) {
+   //clockwise motion for positive desiredDegrees
+   //counter clockwise motion for negative desiredDegrees
+   //powerInput should be positive
    boolean complete = false; 
    double driveYaw;
    double power = 0;
+
+   double ERROR_TOLERANCE = 5.0;
    
-   driveYaw = Double.valueOf(yaw);
+   driveYaw = Double.valueOf(yaw) + 720;
    
-   if (driveYaw < 0) {
-      driveYaw = driveYaw + 360;
+   //if (driveYaw < 0) {
+   //   driveYaw = driveYaw + 360;
+  // }
+   if (powerInput < 0) {
+      powerInput = 0.0; //only use if positive
    }
 
    if (timeInit == false)  {
       yawInit = driveYaw;
+      yawDesired = driveYaw + desiredDegrees;
       timeInit = true;
+      turnCompleteTimer = 0;
    }
+
+   backLeftDriveGain =1;
+   backRightDriveGain =-1;
+   frontLeftDriveGain= 1;
+   frontRightDriveGain = -1;
+
+   yawFlipError = yawDesired-driveYaw;
+   yawFlipErrorSum = yawFlipErrorSum + (yawFlipError * TIME_STEP);
+   SmartDashboard.putNumber("state", state);
+   SmartDashboard.putNumber("yawFlipError", yawFlipError);
+   SmartDashboard.putNumber("driveYaw", driveYaw);
+   if (Math.abs(yawFlipError) > ERROR_TOLERANCE) { 
+      backLeftSpinAngle   =  45;
+      backRightSpinAngle  = -45;
+      frontLeftSpinAngle  = -45;
+      frontRightSpinAngle =  45;
+      
+
+      power = (kp_yaw*yawFlipError)+(ki_yaw*yawFlipErrorSum)+(kd_yaw*(yawFlipError-prevYawFlipError));
+      if (power > powerInput) {power = powerInput;}
+      if (power < -(powerInput)) {power = -(powerInput);}
+
+      prevYawFlipError = yawFlipError;
+
+      m_frontLeftDrive.set(power*frontLeftDriveGain);
+      m_frontRightDrive.set(power*frontRightDriveGain);
+      m_backLeftDrive.set(power*backLeftDriveGain);
+      m_backRightDrive.set(power*backRightDriveGain);
+   } else {
+      backLeftSpinAngle   = 0;
+      backRightSpinAngle  = 0;
+      frontLeftSpinAngle  = 0;
+      frontRightSpinAngle = 0;
+
+      m_frontLeftSteer.set(0);
+      m_frontRightSteer.set(0);
+      m_backLeftSteer.set(0);
+      m_backRightSteer.set(0);
+      m_frontLeftDrive.set(0);
+      m_frontRightDrive.set(0);
+      m_backLeftDrive.set(0);
+      m_backRightDrive.set(0);
+
+      turnCompleteTimer = turnCompleteTimer + 1;
+
+      if (turnCompleteTimer > 20){
+         complete = true;
+         timeInit = false;
+         turnCompleteTimer = 0;
+      }
+   }
+
    //
-   // wheel spin
-   // error = desired - current
-   //
-   // target is 0
-   backLeftSpinAngle   =  45;
-   backRightSpinAngle  = -45;
-   frontLeftSpinAngle  = -45;
-   frontRightSpinAngle =  45;
+   // still in turn degrees, control turning motors
 
    frontRightSpinError = frontRightSpinAngle - frontRightEncoder.getPosition();
    backRightSpinError  = backRightSpinAngle - backRightEncoder.getPosition();
@@ -871,50 +952,16 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
    backLeftSpinErrorSum = 0.0;   //backLeftSpinErrorSum+backLeftSpinError*TIME_STEP;
 
    // calculate the required motor power command to get to desired wheel angle
-   flcmd = -wheelAngle(frontLeftSpinError,  frontLeftSpinErrorSum);
+   flcmd = wheelAngle(frontLeftSpinError,  frontLeftSpinErrorSum);
    frcmd =  wheelAngle(frontRightSpinError, frontRightSpinErrorSum);       
-   blcmd = -wheelAngle(backLeftSpinError,   backLeftSpinErrorSum);
-   brcmd = -wheelAngle(backRightSpinError,  backRightSpinErrorSum);
+   blcmd = wheelAngle(backLeftSpinError,   backLeftSpinErrorSum);
+   brcmd = wheelAngle(backRightSpinError,  backRightSpinErrorSum);
 
    m_frontLeftSteer.set(flcmd);
    m_frontRightSteer.set(frcmd);
    m_backLeftSteer.set(blcmd);
    m_backRightSteer.set(brcmd);
 
-   // yaw 
-   backLeftDriveGain =1;
-   backRightDriveGain =-1;
-   frontLeftDriveGain= 1;
-   frontRightDriveGain = -1;
-
-   yawFlipError = desiredDegrees-driveYaw;
-   yawFlipErrorSum = yawFlipErrorSum + (yawFlipError * TIME_STEP);
-
-   power = (kp_yaw*yawFlipError)+(ki_yaw*yawFlipErrorSum)+(kd_yaw*(yawFlipError-prevYawFlipError));
-   if (power > 0.3) {power = 0.3;}
-   if (power < -0.3) {power = -0.3;}
-   prevYawFlipError = yawFlipError;
-
-   if (Math.abs(yawFlipError) > 5) { 
-      power = (kp_yaw*yawFlipError)+(ki_yaw*yawFlipErrorSum)+(kd_yaw*(yawFlipError-prevYawFlipError));
-      if (power > 0.3) {power = 0.3;}
-      if (power < -0.3) {power = -0.3;}
-      prevYawFlipError = yawFlipError;
-      m_frontLeftDrive.set(power*frontLeftDriveGain);
-      m_frontRightDrive.set(power*frontRightDriveGain);
-      m_backLeftDrive.set(power*backLeftDriveGain);
-      m_backRightDrive.set(power*backRightDriveGain);
-   } else {
-      m_frontLeftSteer.set(0);
-      m_frontRightSteer.set(0);
-      m_backLeftSteer.set(0);
-      m_backRightSteer.set(0);
-      m_frontLeftDrive.set(0);
-      m_frontRightDrive.set(0);
-      m_backLeftDrive.set(0);
-      m_backRightDrive.set(0);
-      complete=true;
-   }
    return(complete);
 }
 
