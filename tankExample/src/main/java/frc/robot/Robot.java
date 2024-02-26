@@ -39,7 +39,7 @@ public class Robot extends TimedRobot {
    private final XboxController m_driverController = new XboxController(0);
    private final XboxController m_bodyController   = new XboxController(1);
 
-   private final DigitalInput m_armPivotLimitSwitch = new DigitalInput(1);
+   private final DigitalInput handoffLimitSwitch = new DigitalInput(0);
 
    CANCoder frontRightEncoder = new CANCoder(1);
    CANCoder frontLeftEncoder = new CANCoder(0);
@@ -103,6 +103,7 @@ public class Robot extends TimedRobot {
    int debug_timer;
    public int stateCounter;
    public int errorCounter;
+   public int waitCounter;
 
    BooleanLogEntry myBooleanLog;
    DoubleLogEntry myDoubleLog;
@@ -204,14 +205,15 @@ public class Robot extends TimedRobot {
       errorCounter = 0;
       prevDrCmd = 0;
       debug_timer = 0;
-	  winchPwr = 0;
-	  prevWinchPwr = 0;
+	   winchPwr = 0;
+	   prevWinchPwr = 0;
+      waitCounter = 0;
 
       // Initialize the gyro in robot init
       gyro.calibrate();
 
       // assign motor encoders
-	  e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
+	   e_frontLeftDrive  = m_frontLeftDrive.getEncoder();
       e_frontRightDrive = m_frontRightDrive.getEncoder();
       e_backLeftDrive   = m_backLeftDrive.getEncoder();
       e_backRightDrive  = m_backRightDrive.getEncoder();
@@ -352,22 +354,19 @@ public class Robot extends TimedRobot {
 	  // Ring Collection and handoff code
       if (button2A) {
          pickupRing();
-      } else {
+      }
+
+      //Turn off collection with the handoff limit switch
+      if (!handoffLimitSwitch.get() || left2Bumper) {
          m_collector.set(0);
          m_handoff.set(0);
-         
-         if (p_collectorLeft.get()==true){
+         if (p_collectorLeft.get()==true) {
             p_collectorLeft.set(false);
          }
-         
-         if (p_collectorRight.get()==true){
+         if (p_collectorRight.get()==true) {
             p_collectorRight.set(false);
          }
       }
-      
-      if (button2X) {
-         powerFlywheel();
-      } 
 
       if (button2B) {
          shootRing();
@@ -375,6 +374,8 @@ public class Robot extends TimedRobot {
          m_shooterIndexer.set(0);
          m_shooterFlywheel.set(0);
       }
+
+
 	  
 	  
       //  m_ledBuffer.setRGB(100, 255, 0, 0);
@@ -1012,7 +1013,7 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       return(desired);
    }
 
-// take the joystick angle and convert it to degrees 
+   // take the joystick angle and convert it to degrees 
    public static double determineDesiredAngle(double joyX, double joyY) {   
       if ((joyX > 0.1)&&(joyY < -0.1)) {
          return(-57.3*Math.atan(Math.abs(joyX/joyY)));
@@ -1041,7 +1042,7 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       return(0.1);
    }
    
-// Raise or lower the main arm   
+   // Raise or lower the main arm   
    private void armPivot() {
       if (p_armPivot.get()==false){
          p_armPivot.set(true);
@@ -1050,7 +1051,7 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       } 
    }
    
-   
+   // Power on the collector and handoff device to grab a ring
    public void pickupRing() {
       m_collector.set(1.0);
       m_handoff.set(0.25);
@@ -1063,11 +1064,12 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       }
    }
    
-   public void powerFlywheel() {
-      m_shooterFlywheel.set(1);
-   }
-   
    public void shootRing() {
-      m_shooterIndexer.set(1);
-   }
+      m_shooterFlywheel.set(1.0);
+      waitCounter = waitCounter++;
+      if(waitCounter > 25) {
+         m_shooterIndexer.set(1.0);
+         waitCounter = 0;
+      }
+   }  
 } //END
