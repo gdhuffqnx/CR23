@@ -102,6 +102,13 @@ public class Robot extends TimedRobot {
    public int errorCounter;
    public int waitCounter;
 
+   private boolean COLLECTOR_RAISED;
+   private boolean COLLECTOR_LOWERED;
+   private boolean ARM_RAISED;
+   private boolean ARM_LOWERED;
+   private boolean b_armPivot;
+   private boolean b_collector;
+
    BooleanLogEntry myBooleanLog;
    DoubleLogEntry myDoubleLog;
    StringLogEntry myStringLog;
@@ -164,13 +171,24 @@ public class Robot extends TimedRobot {
       // important constant
       TIME_STEP = 0.02;  // 50 hertz
 
+      COLLECTOR_RAISED = true;
+      COLLECTOR_LOWERED = false;
+      ARM_RAISED = true;
+      ARM_LOWERED = false;
+
       // Start camera
       camera1 = CameraServer.startAutomaticCapture(0);
       camera2 = CameraServer.startAutomaticCapture(1);
 
       //Enabling the compressor
       m_compressor.enableDigital();
-      
+
+      p_armPivot.set(ARM_LOWERED);
+      b_armPivot = ARM_LOWERED;
+      p_collectorRight.set(COLLECTOR_RAISED);  
+      p_collectorLeft.set(COLLECTOR_RAISED);
+      b_collector = COLLECTOR_RAISED;
+
       m_frontLeftDrive.setInverted(true);
       m_frontRightDrive.setInverted(true);
       m_backLeftDrive.setInverted(true);  
@@ -252,10 +270,10 @@ public class Robot extends TimedRobot {
    public void autonomousPeriodic() {
       yaw =gyro.getYaw();
 
-      double backwardsDistance;
-      double forwardMini;
+      //double backwardsDistance;
+      //double forwardMini;
       double forwardDistance;
-      boolean sleep;
+      //boolean sleep;
       /*    switch (m_autoSelected) {
       case autoDiagonal :
       double backwardsDistance = 48 ;
@@ -270,67 +288,37 @@ public class Robot extends TimedRobot {
         break;
       case autoStraight:
       default:*/
-      backwardsDistance = -36;
-      forwardMini = 4 ;
+      //backwardsDistance = -36;
+      //forwardMini = 4 ;
       forwardDistance =32;
-      sleep=false;
+      //sleep=false;
       //break;
           
 
       switch(state) {
          case 0: 
-         if (shootRing()){
-            m_shooterIndexer.set(0);
-            m_shooterFlywheel.set(0);
-            state++;
-         }
-         break;
-         case 1: 
-         if (driveForwardInches(forwardDistance,0.40)) {
-            state++;
-         }
-         break;
-         case 2: 
-         // if (waitCounter ==0 ) {
-         //  pickupRing();
-         //    waitCounter++;
-         // }
-           driveForwardInches(forwardMini,.40);
-              if  (!handoffLimitSwitch.get()) {
-                 m_collector.set(0);
-                 m_handoff.set(0);
-                    if (p_collectorLeft.get()==true) {
-                       p_collectorLeft.set(false);
-                    }
-                    if (p_collectorRight.get()==true) {
-                       p_collectorRight.set(false);
-                    }
-                 state++;
-            }
-         break;
-         case 3:
-              if (driveForwardInches(backwardsDistance,0.40)) {
+            if (shootRing()){
+               m_shooterIndexer.set(0);
+               m_shooterFlywheel.set(0);
                state++;
             }
          break;
-         case 4:
-         if(sleep){
-              state++;
-           } else {
-             if (shootRing()) {
-              m_shooterIndexer.set(0);
-              m_shooterFlywheel.set(0);
-              state++;
-           }
-         //case 5:
-         //Do nothing Case
-         
-         }
+         case 1: 
+            if (turnDegrees(20,0.25)) {
+               state++;
+            }
          break;
-        // Put default auto code here
-   }
-}
+         case 2: 
+            if (driveForwardInches(forwardDistance,0.25)) {
+               state++;
+            }
+         break;
+         case 3:
 
+         break;
+         
+      }
+   } // end of autonomousPeriodic
 
    @Override
    public void teleopPeriodic() {
@@ -380,7 +368,7 @@ public class Robot extends TimedRobot {
       rightTrigger = m_driverController.getRightTriggerAxis();
 
 	  //Game Pad 2 - Arm control
-     double right2Trigger= m_bodyController.getRightTriggerAxis();
+      double right2Trigger= m_bodyController.getRightTriggerAxis();
       button2A = m_bodyController.getAButtonPressed();
       button2B = m_bodyController.getBButton();
       button2Y = m_bodyController.getYButton();
@@ -396,7 +384,7 @@ public class Robot extends TimedRobot {
       yaw = gyro.getYaw();
       desiredAngle = prevDesiredAngle;
 	  
-	  // Ring Collection and handoff code
+	   // Ring Collection and handoff code
       if (button2B) {
          pickupRing();
       }
@@ -405,11 +393,14 @@ public class Robot extends TimedRobot {
       if (!handoffLimitSwitch.get()) {
          m_collector.set(0);
          m_handoff.set(0);
-         if (p_collectorLeft.get()==true) {
-            p_collectorLeft.set(false);
-         }
-         if (p_collectorRight.get()==true) {
-            p_collectorRight.set(false);
+         if (b_collector==COLLECTOR_RAISED) {
+            p_collectorLeft.set(COLLECTOR_LOWERED);
+            p_collectorRight.set(COLLECTOR_LOWERED);
+            b_collector = COLLECTOR_LOWERED;
+         } else {
+            p_collectorLeft.set(COLLECTOR_RAISED);
+            p_collectorRight.set(COLLECTOR_RAISED);
+            b_collector = COLLECTOR_RAISED;
          }
       }
 
@@ -420,18 +411,17 @@ public class Robot extends TimedRobot {
       }
 
       if (right2Trigger>.6) {
-      m_shooterIndexer.set(1.0);
-   } else {
-      m_shooterIndexer.set(0);
-   }
-
-	  
-      //  m_ledBuffer.setRGB(100, 255, 0, 0);
-      for (var i = 0; i < m_ledBuffer.getLength(); i++) {
-         // Sets the specified LED to the RGB values for red
-         m_ledBuffer.setRGB(i, 255, 0, 0);
+         m_shooterIndexer.set(1.0);
+      } else {
+         m_shooterIndexer.set(0);
       }
-      m_led.setData(m_ledBuffer);
+
+      //  m_ledBuffer.setRGB(100, 255, 0, 0);
+      // for (var i = 0; i < m_ledBuffer.getLength(); i++) {
+         // Sets the specified LED to the RGB values for red
+      //   m_ledBuffer.setRGB(i, 255, 0, 0);
+      //}
+      //m_led.setData(m_ledBuffer);
 
       //this gain is the drive wheel speed gain
       gainTgt = 0.25; 
@@ -608,32 +598,28 @@ public class Robot extends TimedRobot {
 
          drCmd = 0.0;
       }
-      double test1;
-	  if ((m_bodyController.getPOV()>260)&&(m_bodyController.getPOV()<280)){
-      p_armPivot.set(false);
-      test1 = m_bodyController.getPOV(); 
-         SmartDashboard.putNumber("getPr", test1);
+
+      double bodyControllerPOV;
+      bodyControllerPOV =  m_bodyController.getPOV();
+	   if ((bodyControllerPOV > 260) && (bodyControllerPOV < 280)){
+         p_armPivot.set(ARM_LOWERED);
+         SmartDashboard.putNumber("POV", bodyControllerPOV);
      }
-     if ((m_bodyController.getPOV()>80) && (m_bodyController.getPOV()<100)){
-      p_armPivot.set(true);
-      test1 = m_bodyController.getPOV(); 
-      SmartDashboard.putNumber("getPr", test1);
+     if ((bodyControllerPOV > 80) && (bodyControllerPOV < 100)){
+        p_armPivot.set(ARM_RAISED);
+        SmartDashboard.putNumber("POV", bodyControllerPOV);
      }
-	  //Winch logic
-      //if (button2X){
-      //   armPivot();
-     // }
 
       double MAX_NEGATIVE_PWR = -0.8;
       double MAX_POSITIVE_PWR =  0.8;
       
-      if ((170 < m_bodyController.getPOV())&&(m_bodyController.getPOV()<190 )){
+      if ((170 < bodyControllerPOV)&&(bodyControllerPOV<190 )){
          if (prevWinchPwr >  MAX_NEGATIVE_PWR){
             winchPwr = prevWinchPwr -0.01;
          } else {
             winchPwr = MAX_NEGATIVE_PWR;
          }  
-      } else if (( m_bodyController.getPOV()<10)||( m_bodyController.getPOV()>350)){
+      } else if (( bodyControllerPOV<10)||( bodyControllerPOV>350)){
          if (prevWinchPwr < MAX_POSITIVE_PWR){
             winchPwr = prevWinchPwr +0.01;
          } else {
@@ -642,9 +628,9 @@ public class Robot extends TimedRobot {
       } else {
          winchPwr = 0.0;
       }
-	  m_winchOne.set(winchPwr);
+  	   m_winchOne.set(winchPwr);
       m_winchTwo.set(winchPwr);
-	  prevWinchPwr = winchPwr; 
+      prevWinchPwr = winchPwr; 
 	  
       // next two sections deal with rotating the robot 180 degrees
       // turning it around - yaw
@@ -1115,12 +1101,15 @@ public boolean turnDegrees(double desiredDegrees, double powerInput) {
       m_collector.set(.2);
       m_handoff.set(0.25);
       
-      if (p_collectorLeft.get()==false){ 
-         p_collectorLeft.set(true);
-      }
-      if (p_collectorRight.get()==false){
-         p_collectorRight.set(true);
-      }
+      //if (p_collectorLeft.get()==false){ 
+      //   p_collectorLeft.set(true);
+      // }
+      //if (p_collectorRight.get()==false){
+      //   p_collectorRight.set(true);
+      // }
+      p_collectorLeft.set(COLLECTOR_LOWERED);
+      p_collectorRight.set(COLLECTOR_LOWERED);
+      b_collector = COLLECTOR_LOWERED;
    }
    
    public boolean shootRing() {
